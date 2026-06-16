@@ -1,0 +1,7 @@
+{
+  "ghealth_bin": "ghealth",
+  "daily_log": "C:\\path\\to\\DAILY_LOG.json",
+  "elliptical_types": ["ELLIPTICAL"],
+  "zone2_low": 110,
+  "zone2_high": 130
+}
