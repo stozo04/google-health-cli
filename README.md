@@ -1,9 +1,9 @@
-# cardio-cli
+# google-health-cli
 
 The **cardio** counterpart to [`speediance-cli`](https://github.com/stozo04/speediance-cli).
 
 - `speediance-cli` pulls Steven's **strength** sessions from the Speediance cloud → writes weights/reps into `WEEKS/Week-XX.md`.
-- `cardio-cli` pulls Steven's **elliptical / Zone 2** sessions from the **Google Health API** (via the [`ghealth`](https://github.com/rudrankriyam/Google-Health-CLI) binary) → writes them into `DAILY_LOG.json`.
+- `google-health-cli` pulls Steven's **elliptical / Zone 2** sessions from the **Google Health API** (via the [`ghealth`](https://github.com/rudrankriyam/Google-Health-CLI) binary) → writes them into `DAILY_LOG.json`.
 
 His Google Watch logs **both** the elliptical and the Speediance strength workouts into Google Health. So the core job of this tool is the **dedup filter**: it keeps **only** elliptical/cross-trainer sessions and drops strength training, otherwise we'd double-count the strength work `speediance-cli` already owns.
 
@@ -31,19 +31,19 @@ Avg heart rate is the field that matters most — Steven's Zone 2 target is **11
 2. `copy config.example.json config.json` and confirm the paths.
 3. Lock the `elliptical_types` allowlist from real data:
    ```sh
-   python -m cardio sessions --days 14          # see how each session is tagged
+   python -m google_health sessions --days 14          # see how each session is tagged
    ```
    Put the elliptical `exercise_type` value(s) into `config.json`.
 
 ## Usage
 
 ```sh
-python -m cardio doctor                 # is ghealth installed + logged in?
-python -m cardio sessions --days 14     # list all sessions, ✓ marks cardio
-python -m cardio sessions --raw         # dump raw API JSON (for debugging)
-python -m cardio sync --dry-run         # preview what would be written
-python -m cardio sync --date yesterday  # write yesterday's cardio
-python -m cardio sync --days 7          # backfill the last 7 days
+python -m google_health doctor                 # is ghealth installed + logged in?
+python -m google_health sessions --days 14     # list all sessions, ✓ marks cardio
+python -m google_health sessions --raw         # dump raw API JSON (for debugging)
+python -m google_health sync --dry-run         # preview what would be written
+python -m google_health sync --date yesterday  # write yesterday's cardio
+python -m google_health sync --days 7          # backfill the last 7 days
 ```
 
 `sync` is idempotent per day — re-running overwrites that day's `cardio` rather than duplicating.

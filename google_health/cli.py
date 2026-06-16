@@ -1,4 +1,4 @@
-"""cardio-cli — pull elliptical cardio from Google Health into DAILY_LOG.json.
+"""google-health-cli — pull elliptical cardio from Google Health into DAILY_LOG.json.
 
 Commands:
   doctor     Check ghealth is reachable and authenticated.
@@ -137,8 +137,8 @@ def cmd_sync(args):
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(prog="cardio",
-                                description="Log elliptical cardio into DAILY_LOG.json.")
+    p = argparse.ArgumentParser(prog="google_health",
+                                description="Sync Google Health data (elliptical cardio) into DAILY_LOG.json.")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sp = sub.add_parser("doctor", help="Check ghealth setup + auth")

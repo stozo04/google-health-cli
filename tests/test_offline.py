@@ -5,7 +5,7 @@ shaped like plausible Google Health Exercise sessions. The exact real field
 names get confirmed against live data, but this proves the wiring/guards now.
 """
 import copy
-from cardio import health, daily_log as logmod
+from google_health import health, daily_log as logmod
 
 CFG = {
     "elliptical_types": ["ELLIPTICAL"],

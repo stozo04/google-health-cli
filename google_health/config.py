@@ -18,20 +18,20 @@ offset ships in the data), so no timezone config is needed.
 import os
 import json
 
-# Project root = the cardio-cli/ folder that contains this package.
+# Project root = the google-health-cli/ folder that contains this package.
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _default_config_path():
     """config.json in CWD first (matches speediance-cli), else next to the
-    package so `python -m cardio` works from any directory (e.g. the Monday
-    check-in running from the Workout folder)."""
+    package so `python -m google_health` works from any directory (e.g. the
+    Monday check-in running from the Workout folder)."""
     if os.path.exists("config.json"):
         return "config.json"
     return os.path.join(_PROJECT_ROOT, "config.json")
 
 
-CONFIG_PATH = os.environ.get("CARDIO_CONFIG", _default_config_path())
+CONFIG_PATH = os.environ.get("GOOGLE_HEALTH_CONFIG", _default_config_path())
 
 DEFAULTS = {
     # Path to the ghealth executable (the Google Health API client).
@@ -53,11 +53,11 @@ def load_config():
     if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             cfg.update(json.load(f))
-    cfg["ghealth_bin"] = os.environ.get("CARDIO_GHEALTH_BIN", cfg["ghealth_bin"])
-    cfg["daily_log"] = os.environ.get("CARDIO_DAILY_LOG", cfg["daily_log"])
+    cfg["ghealth_bin"] = os.environ.get("GOOGLE_HEALTH_BIN", cfg["ghealth_bin"])
+    cfg["daily_log"] = os.environ.get("GOOGLE_HEALTH_DAILY_LOG", cfg["daily_log"])
     if not cfg["daily_log"]:
         raise SystemExit(
-            "Missing daily_log path. Set it in config.json or via CARDIO_DAILY_LOG. "
+            "Missing daily_log path. Set it in config.json or via GOOGLE_HEALTH_DAILY_LOG. "
             "It should point at the Workout project's DAILY_LOG.json."
         )
     return cfg

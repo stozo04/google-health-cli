@@ -1,4 +1,4 @@
-"""cardio-cli — log NordicTrack/elliptical Zone 2 cardio into DAILY_LOG.json.
+"""google-health-cli — log NordicTrack/elliptical Zone 2 cardio into DAILY_LOG.json.
 
 The cardio counterpart to speediance-cli. Where speediance-cli pulls Steven's
 strength sessions from the Speediance cloud and writes them into the WEEKS sheet,
