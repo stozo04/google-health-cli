@@ -48,6 +48,7 @@ archives:
       - README.md
       - OAUTH_SETUP.md
       - AGENTS.md
+      - SKILL.md
       - LICENSE
 
 checksum:
