@@ -39,3 +39,7 @@ jobs:
         uses: golangci/golangci-lint-action@v7
         with:
           version: v2.1.6
+          # Build golangci-lint from source with the runner's Go (1.25) instead of
+          # downloading the prebuilt v2.1.6 binary (built with go1.24, which refuses
+          # to lint this go1.25.0 module). Mirrors the local toolchain.
+          install-mode: goinstall
