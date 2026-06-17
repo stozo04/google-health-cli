@@ -52,8 +52,8 @@ vet: ## Run go vet
 	go vet $(PKG)
 
 .PHONY: golden
-golden: ## Regenerate golden files from the real Python tool
-	python tools/gen_golden.py
+golden: ## Regenerate golden files from current Go output
+	UPDATE_GOLDEN=1 go test ./internal/cli/
 
 .PHONY: snapshot
 snapshot: ## Cross-compile a local snapshot with GoReleaser (no publish)

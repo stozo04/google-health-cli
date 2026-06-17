@@ -16,7 +16,6 @@ type doctorReport struct {
 	User       string   `json:"user"`
 	TokenPath  string   `json:"tokenPath"`
 	ConfigPath string   `json:"configPath"`
-	DailyLog   string   `json:"dailyLog"`
 	Scopes     []string `json:"scopes"`
 	Version    string   `json:"version"`
 }
@@ -55,7 +54,6 @@ func newDoctorCmd(app *App) *cobra.Command {
 				User:       cfg.User,
 				TokenPath:  cfg.TokenCache,
 				ConfigPath: cfg.ConfigPath,
-				DailyLog:   cfg.DailyLog,
 				Scopes:     cfg.Scopes,
 				Version:    version.Info().Version,
 			}

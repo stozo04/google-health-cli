@@ -1,14 +1,15 @@
 // Package config resolves runtime configuration and credential discovery.
 //
-// Precedence (GOAL.md §7), lowest to highest: built-in defaults < config.json <
-// environment variables < command flags. The names of every env var and every
-// JSON key are part of the external contract and must not be renamed — existing
-// users and the Monday check-in automation depend on them.
+// Precedence (lowest to highest): built-in defaults < config.json < environment
+// variables < command flags. The names of every env var and every JSON key are
+// part of the external contract and must not be renamed — agents and scripts
+// depend on them.
 //
-// This is a port of the Python google_health/config.py, extended for the
-// credentials the self-contained Go tool now owns (the Python tool held none —
-// the `ghealth` binary did). The removed `ghealth_bin` / GOOGLE_HEALTH_BIN keys
-// are ignored silently if a stale config still carries them (loose decode).
+// This tool is a generic, read-only Google Health extractor: it owns OAuth and
+// the v4 API wire, and knows nothing about any downstream data layout. There is
+// intentionally no notion of a daily log, an exercise allowlist, or heart-rate
+// bands here — consuming agents derive whatever they care about from the emitted
+// data.
 package config
 
 import (
@@ -19,48 +20,46 @@ import (
 	"path/filepath"
 )
 
-// Environment variable names (frozen — GOAL.md §7). G101: these are env-var
-// names, not embedded credentials.
+// Environment variable names (frozen). G101: these are env-var names, not
+// embedded credentials.
 const (
 	EnvConfig       = "GOOGLE_HEALTH_CONFIG"
-	EnvDailyLog     = "GOOGLE_HEALTH_DAILY_LOG"
 	EnvClientID     = "GOOGLE_HEALTH_CLIENT_ID"
 	EnvClientSecret = "GOOGLE_HEALTH_CLIENT_SECRET" //nolint:gosec // env var name, not a secret.
 	EnvBaseURL      = "GOOGLE_HEALTH_BASE_URL"
 	EnvTokenCache   = "GOOGLE_HEALTH_TOKEN_CACHE"
 )
 
-// Defaults (GOAL.md §7).
+// Defaults.
 const (
-	DefaultBaseURL   = "https://health.googleapis.com"
-	DefaultUser      = "users/me"
-	DefaultZone2Low  = 110
-	DefaultZone2High = 130
-
-	// DefaultScope is the single least-privilege read scope (GOAL.md §2.7, §22).
-	DefaultScope = "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly"
+	DefaultBaseURL = "https://health.googleapis.com"
+	DefaultUser    = "users/me"
 
 	defaultConfigName = "config.json"
 	defaultTokenName  = "token.json"
 	appDirName        = "google-health-cli"
 )
 
-// ErrMissingDailyLog is returned by RequireDailyLog when no daily_log path could
-// be resolved from any source.
-var ErrMissingDailyLog = errors.New("missing daily_log path")
+// DefaultScopes is the full set of read-only Google Health scopes the tool
+// requests at login, so an authorized token can read every data type the API
+// exposes. Read-only only — the tool never requests a write scope.
+var DefaultScopes = []string{
+	"https://www.googleapis.com/auth/googlehealth.profile.readonly",
+	"https://www.googleapis.com/auth/googlehealth.settings.readonly",
+	"https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly",
+	"https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly",
+	"https://www.googleapis.com/auth/googlehealth.sleep.readonly",
+	"https://www.googleapis.com/auth/googlehealth.nutrition.readonly",
+}
 
 // Config is the fully resolved configuration handed to commands.
 type Config struct {
-	DailyLog        string
-	EllipticalTypes []string
-	Zone2Low        int
-	Zone2High       int
-	ClientID        string
-	ClientSecret    string
-	BaseURL         string
-	User            string
-	TokenCache      string
-	Scopes          []string
+	ClientID     string
+	ClientSecret string
+	BaseURL      string
+	User         string
+	TokenCache   string
+	Scopes       []string
 
 	// ConfigPath is where config.json was loaded from, or where it would be
 	// written if it does not yet exist.
@@ -71,19 +70,16 @@ type Config struct {
 
 // fileConfig mirrors config.json. Pointer fields distinguish "key present" from
 // "key absent" so an absent key falls through to the default rather than
-// overwriting it with a zero value. Unknown keys (e.g. the removed ghealth_bin)
-// are ignored by encoding/json — exactly the "loose decode" GOAL.md §7 wants.
+// overwriting it with a zero value. Unknown keys (e.g. a stale daily_log or
+// elliptical_types from an older config) are ignored by encoding/json — a loose,
+// forward-compatible decode.
 type fileConfig struct {
-	DailyLog        *string  `json:"daily_log"`
-	EllipticalTypes []string `json:"elliptical_types"`
-	Zone2Low        *int     `json:"zone2_low"`
-	Zone2High       *int     `json:"zone2_high"`
-	ClientID        *string  `json:"client_id"`
-	ClientSecret    *string  `json:"client_secret"`
-	BaseURL         *string  `json:"base_url"`
-	User            *string  `json:"user"`
-	TokenCache      *string  `json:"token_cache"`
-	Scopes          []string `json:"scopes"`
+	ClientID     *string  `json:"client_id"`
+	ClientSecret *string  `json:"client_secret"`
+	BaseURL      *string  `json:"base_url"`
+	User         *string  `json:"user"`
+	TokenCache   *string  `json:"token_cache"`
+	Scopes       []string `json:"scopes"`
 }
 
 // Options carries inputs the caller already knows from flags, so config
@@ -95,15 +91,12 @@ type Options struct {
 }
 
 // Load resolves configuration from defaults, config.json, and environment
-// variables (GOAL.md §7).
+// variables.
 func Load(opts Options) (*Config, error) {
 	cfg := &Config{
-		EllipticalTypes: []string{"ELLIPTICAL"},
-		Zone2Low:        DefaultZone2Low,
-		Zone2High:       DefaultZone2High,
-		BaseURL:         DefaultBaseURL,
-		User:            DefaultUser,
-		Scopes:          []string{DefaultScope},
+		BaseURL: DefaultBaseURL,
+		User:    DefaultUser,
+		Scopes:  append([]string(nil), DefaultScopes...),
 	}
 
 	// 1. Locate and read config.json (if any).
@@ -128,11 +121,10 @@ func Load(opts Options) (*Config, error) {
 	return cfg, nil
 }
 
-// discoverConfigPath implements GOAL.md §7 discovery:
+// discoverConfigPath implements config discovery:
 //  1. --config flag or GOOGLE_HEALTH_CONFIG env (explicit path; flag wins).
 //  2. config.json in the current working directory.
-//  3. config.json next to the executable — the analog of Python's "next to the
-//     package" fallback, so the Monday check-in can run from the Workout folder.
+//  3. config.json next to the executable, so the tool works from any directory.
 //  4. otherwise keep the CWD path (so `config show`/errors have something sane).
 func discoverConfigPath(flagPath string) string {
 	if flagPath != "" {
@@ -169,18 +161,6 @@ func readFileConfig(path string) (fileConfig, bool, error) {
 }
 
 func applyFile(cfg *Config, fc fileConfig) {
-	if fc.DailyLog != nil {
-		cfg.DailyLog = *fc.DailyLog
-	}
-	if fc.EllipticalTypes != nil {
-		cfg.EllipticalTypes = fc.EllipticalTypes
-	}
-	if fc.Zone2Low != nil {
-		cfg.Zone2Low = *fc.Zone2Low
-	}
-	if fc.Zone2High != nil {
-		cfg.Zone2High = *fc.Zone2High
-	}
 	if fc.ClientID != nil {
 		cfg.ClientID = *fc.ClientID
 	}
@@ -202,9 +182,6 @@ func applyFile(cfg *Config, fc fileConfig) {
 }
 
 func applyEnv(cfg *Config) {
-	if v, ok := os.LookupEnv(EnvDailyLog); ok {
-		cfg.DailyLog = v
-	}
 	if v, ok := os.LookupEnv(EnvClientID); ok {
 		cfg.ClientID = v
 	}
@@ -226,15 +203,4 @@ func defaultTokenCachePath() string {
 		return filepath.Join(dir, appDirName, defaultTokenName)
 	}
 	return defaultTokenName
-}
-
-// RequireDailyLog returns a friendly error (shown on stderr) when no daily_log
-// path was resolved. Mirrors the Python config.py SystemExit message (GOAL.md
-// §7, §12).
-func (c *Config) RequireDailyLog() error {
-	if c.DailyLog == "" {
-		return fmt.Errorf("%w: set it in config.json or via %s. "+
-			"It should point at the Workout project's DAILY_LOG.json", ErrMissingDailyLog, EnvDailyLog)
-	}
-	return nil
 }

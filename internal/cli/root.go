@@ -35,11 +35,15 @@ func NewRootCmd() *cobra.Command {
 
 	root := &cobra.Command{
 		Use:   "google-health-cli",
-		Short: "Sync Google Health elliptical cardio into DAILY_LOG.json",
-		Long: "google-health-cli pulls your exercise sessions from the Google Health API\n" +
-			"(read-only OAuth2), filters them to a configurable allowlist of exercise types\n" +
-			"(elliptical / cross-trainer by default), and upserts the matches into a JSON\n" +
-			"daily-log file. It is self-contained — no external helper binary required.",
+		Short: "Read-only Google Health data extractor (auth + all data types as JSON)",
+		Long: "google-health-cli is a self-contained, read-only client for the Google Health\n" +
+			"API. It owns OAuth2 login and the v4 REST wire, and emits your health data as\n" +
+			"JSON for any agent or script to consume. It does no filtering or derivation —\n" +
+			"callers get the data and parse whatever they care about.\n\n" +
+			"  types list|describe   discover the data types you can read\n" +
+			"  data list <type>      read data points (heart-rate, sleep, steps, exercise, …)\n" +
+			"  sessions              parsed exercise sessions (convenience)\n" +
+			"  api get <path>        raw read-only GET for anything else (profile, settings, …)",
 		// Runtime failures print one error line to stderr ourselves; never dump
 		// usage on them, and never let cobra also print the error (GOAL.md §12).
 		SilenceUsage:  true,
@@ -73,8 +77,10 @@ func NewRootCmd() *cobra.Command {
 func addCommands(app *App, root *cobra.Command) {
 	root.AddCommand(
 		newDoctorCmd(app),
+		newTypesCmd(app),
+		newDataCmd(app),
 		newSessionsCmd(app),
-		newSyncCmd(app),
+		newAPICmd(app),
 		newAuthCmd(app),
 		newConfigCmd(app),
 		newVersionCmd(app),

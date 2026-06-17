@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func TestListExerciseDataPoints_PaginationAndQuery(t *testing.T) {
+func TestListDataPoints_PaginationAndQuery(t *testing.T) {
 	page1 := `{"dataPoints":[{"name":"users/me/dataTypes/exercise/dataPoints/1","exercise":{"exerciseType":"ELLIPTICAL"}}],"nextPageToken":"TOK2"}`
 	page2 := `{"dataPoints":[{"name":"users/me/dataTypes/exercise/dataPoints/2","exercise":{"exerciseType":"STRENGTH_TRAINING"}}]}`
 
@@ -33,10 +33,11 @@ func TestListExerciseDataPoints_PaginationAndQuery(t *testing.T) {
 	c := New(srv.Client(), srv.URL, "users/me", nil)
 	from := time.Date(2026, 6, 14, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, 6, 18, 0, 0, 0, 0, time.UTC)
+	exercise, _ := LookupDataType("exercise")
 
-	pts, err := c.ListExerciseDataPoints(context.Background(), from, to)
+	pts, err := c.ListDataPoints(context.Background(), exercise, from, to, true)
 	if err != nil {
-		t.Fatalf("ListExerciseDataPoints: %v", err)
+		t.Fatalf("ListDataPoints: %v", err)
 	}
 	if len(pts) != 2 {
 		t.Fatalf("got %d points, want 2", len(pts))
@@ -70,7 +71,7 @@ func TestListExerciseDataPoints_PaginationAndQuery(t *testing.T) {
 	}
 }
 
-func TestListExerciseDataPoints_ErrorEnvelope(t *testing.T) {
+func TestListDataPoints_ErrorEnvelope(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
@@ -79,9 +80,10 @@ func TestListExerciseDataPoints_ErrorEnvelope(t *testing.T) {
 	defer srv.Close()
 
 	c := New(srv.Client(), srv.URL, "users/me", nil)
-	_, err := c.ListExerciseDataPoints(context.Background(),
+	exercise, _ := LookupDataType("exercise")
+	_, err := c.ListDataPoints(context.Background(), exercise,
 		time.Date(2026, 6, 14, 0, 0, 0, 0, time.UTC),
-		time.Date(2026, 6, 18, 0, 0, 0, 0, time.UTC))
+		time.Date(2026, 6, 18, 0, 0, 0, 0, time.UTC), true)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -97,18 +99,19 @@ func TestListExerciseDataPoints_ErrorEnvelope(t *testing.T) {
 	}
 }
 
-func TestListExerciseDataPoints_Empty(t *testing.T) {
+func TestListDataPoints_Empty(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{}`)) // no dataPoints key at all.
 	}))
 	defer srv.Close()
 
 	c := New(srv.Client(), srv.URL, "users/me", nil)
-	pts, err := c.ListExerciseDataPoints(context.Background(),
+	exercise, _ := LookupDataType("exercise")
+	pts, err := c.ListDataPoints(context.Background(), exercise,
 		time.Date(2026, 6, 14, 0, 0, 0, 0, time.UTC),
-		time.Date(2026, 6, 18, 0, 0, 0, 0, time.UTC))
+		time.Date(2026, 6, 18, 0, 0, 0, 0, time.UTC), true)
 	if err != nil {
-		t.Fatalf("ListExerciseDataPoints: %v", err)
+		t.Fatalf("ListDataPoints: %v", err)
 	}
 	if len(pts) != 0 {
 		t.Errorf("got %d points, want 0", len(pts))

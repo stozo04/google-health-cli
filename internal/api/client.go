@@ -55,18 +55,21 @@ func New(httpClient *http.Client, baseURL, user string, logger *slog.Logger) *Cl
 	}
 }
 
-// ListExerciseDataPoints returns every exercise data point whose civil start
-// time falls in [from, to). It follows nextPageToken until the API stops
-// paginating (GOAL.md §9). from/to are naive local civil datetimes.
-func (c *Client) ListExerciseDataPoints(ctx context.Context, from, to time.Time) ([]DataPoint, error) {
-	filter := FilterFromRange(from, to)
-	endpoint := fmt.Sprintf("%s/v4/%s/dataTypes/exercise/dataPoints", c.baseURL, c.user)
+// ListDataPoints returns every data point of dt whose default time field falls
+// in [from, to). When filtered is false the time filter is omitted and the API
+// returns everything it has for that type. It follows nextPageToken until the
+// API stops paginating. For civil types from/to are naive local civil datetimes;
+// for sample/daily types they are absolute instants.
+func (c *Client) ListDataPoints(ctx context.Context, dt DataType, from, to time.Time, filtered bool) ([]DataPoint, error) {
+	endpoint := fmt.Sprintf("%s/v4/%s/dataTypes/%s/dataPoints", c.baseURL, c.user, dt.EndpointName)
 
 	var points []DataPoint
 	pageToken := ""
 	for {
 		q := url.Values{}
-		q.Set("filter", filter)
+		if filtered {
+			q.Set("filter", dt.RangeFilter(from, to))
+		}
 		q.Set("pageSize", fmt.Sprintf("%d", pageSize))
 		if pageToken != "" {
 			q.Set("pageToken", pageToken)
@@ -95,6 +98,33 @@ func (c *Client) ListExerciseDataPoints(ctx context.Context, from, to time.Time)
 		pageToken = resp.NextPageToken
 	}
 	return points, nil
+}
+
+// RawGet performs one authenticated GET against path (joined to the base URL)
+// and returns the response body verbatim. It is the read-only escape hatch
+// behind the `api get` command, reaching endpoints the typed surface does not
+// model (profile, settings, identity, a single dataPoint by name, …). Non-2xx
+// responses become a typed *Error carrying Google's message.
+func (c *Client) RawGet(ctx context.Context, path string) (json.RawMessage, error) {
+	reqURL := c.baseURL + "/" + strings.TrimLeft(path, "/")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, &Error{Message: fmt.Sprintf("request failed: %v", err)}
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	if err != nil {
+		return nil, &Error{StatusCode: resp.StatusCode, Message: fmt.Sprintf("read response: %v", err)}
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, &Error{StatusCode: resp.StatusCode, Message: errorMessage(data, resp.StatusCode)}
+	}
+	return json.RawMessage(data), nil
 }
 
 // get performs one GET and decodes the list envelope, mapping non-2xx responses

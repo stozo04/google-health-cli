@@ -36,11 +36,10 @@ it for your own account in **Testing** mode. No fees, no app review for personal
 4. Copy the **Client ID** and **Client secret** (or download the JSON).
 
 ## 5. Point google-health-cli at the client + log in
-Put the client id/secret in `config.json` (next to `daily_log`):
+Put the client id/secret in `config.json`:
 
 ```json
 {
-  "daily_log": "C:\\path\\to\\DAILY_LOG.json",
   "client_id": "PASTE_CLIENT_ID",
   "client_secret": "PASTE_CLIENT_SECRET"
 }
@@ -49,14 +48,16 @@ Put the client id/secret in `config.json` (next to `daily_log`):
 (Or set `GOOGLE_HEALTH_CLIENT_ID` / `GOOGLE_HEALTH_CLIENT_SECRET` in the environment instead.) Then:
 
 ```sh
-google-health-cli auth login     # read-only scopes by default — there is no write mode
+google-health-cli auth login     # read-only scopes only — there is no write mode
 ```
 
 `auth login` opens a browser:
 1. Sign in as that same Google account.
 2. You'll see **"Google hasn't verified this app."** This is expected — it's your
    own project. Click **Advanced → Go to ghealth-personal (unsafe)**.
-3. Grant the read-only Google Health permissions.
+3. Grant the **read-only** Google Health permissions. The tool requests all six read
+   scopes (profile, settings, activity & fitness, health metrics & measurements,
+   sleep, nutrition) so it can read every data type — none of them grant write access.
 
 The token is cached locally (owner-only, `0600`) and auto-refreshed on use.
 

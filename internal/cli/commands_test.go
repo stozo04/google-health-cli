@@ -41,16 +41,14 @@ func withBaseURL(t *testing.T, url string) {
 }
 
 // testConfig writes a config.json and (optionally) a valid token into a temp
-// dir, returning the config path and daily-log path.
-func testConfig(t *testing.T, withToken bool) (cfgPath, dailyLog string) {
+// dir, returning the config path.
+func testConfig(t *testing.T, withToken bool) string {
 	t.Helper()
 	dir := t.TempDir()
 	tokenPath := filepath.Join(dir, "token.json")
-	dailyLog = filepath.Join(dir, "DAILY_LOG.json")
-	cfgPath = filepath.Join(dir, "config.json")
+	cfgPath := filepath.Join(dir, "config.json")
 
 	cfg := map[string]any{
-		"daily_log":     dailyLog,
 		"client_id":     "test-client",
 		"client_secret": "test-secret",
 		"token_cache":   tokenPath,
@@ -65,7 +63,7 @@ func testConfig(t *testing.T, withToken bool) (cfgPath, dailyLog string) {
 			t.Fatal(err)
 		}
 	}
-	return cfgPath, dailyLog
+	return cfgPath
 }
 
 // run executes the root command with args, capturing stdout and stderr.
@@ -83,7 +81,7 @@ func run(t *testing.T, args ...string) (stdout, stderr string, err error) {
 func TestSessionsJSONCommand(t *testing.T) {
 	srv := fixtureServer(t)
 	withBaseURL(t, srv.URL)
-	cfg, _ := testConfig(t, true)
+	cfg := testConfig(t, true)
 
 	stdout, _, err := run(t, "--config", cfg, "sessions", "--json", "--date", "2026-06-16", "--days", "60")
 	if err != nil {
@@ -95,7 +93,7 @@ func TestSessionsJSONCommand(t *testing.T) {
 func TestSessionsRawCommand(t *testing.T) {
 	srv := fixtureServer(t)
 	withBaseURL(t, srv.URL)
-	cfg, _ := testConfig(t, true)
+	cfg := testConfig(t, true)
 
 	stdout, _, err := run(t, "--config", cfg, "sessions", "--raw", "--date", "2026-06-16", "--days", "60")
 	if err != nil {
@@ -105,7 +103,7 @@ func TestSessionsRawCommand(t *testing.T) {
 }
 
 func TestSessionsNotAuthenticated(t *testing.T) {
-	cfg, _ := testConfig(t, false) // no token
+	cfg := testConfig(t, false) // no token
 	_, _, err := run(t, "--config", cfg, "sessions")
 	var exit *ExitError
 	if !errors.As(err, &exit) || exit.Code != ExitAuth {
@@ -113,92 +111,54 @@ func TestSessionsNotAuthenticated(t *testing.T) {
 	}
 }
 
-func TestSyncCommandWritesGolden(t *testing.T) {
+func TestDataListCommand(t *testing.T) {
 	srv := fixtureServer(t)
 	withBaseURL(t, srv.URL)
-	cfg, dailyLog := testConfig(t, true)
+	cfg := testConfig(t, true)
 
-	// Seed the daily log with the committed input fixture.
-	in, err := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "daily_log_input.json"))
+	// The fixture server returns the exercise payload for any path; `data list
+	// exercise` should emit a JSON array on stdout and a count on stderr.
+	stdout, stderr, err := run(t, "--config", cfg, "data", "list", "exercise", "--date", "2026-06-16", "--days", "60")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("data list: %v", err)
 	}
-	if err := os.WriteFile(dailyLog, in, 0o644); err != nil {
-		t.Fatal(err)
+	var arr []json.RawMessage
+	if err := json.Unmarshal([]byte(stdout), &arr); err != nil {
+		t.Fatalf("data list stdout not a JSON array: %v\n%s", err, stdout)
 	}
-
-	stdout, _, err := run(t, "--config", cfg, "sync", "--date", "2026-06-16", "--days", "30")
-	if err != nil {
-		t.Fatalf("sync: %v", err)
+	if len(arr) == 0 {
+		t.Error("expected data points from the fixture")
 	}
-	assertGolden(t, "sync_human.golden", []byte(stdout))
-
-	written, err := os.ReadFile(dailyLog)
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertGolden(t, "daily_log_output.golden", written)
-}
-
-func TestSyncJSONCommand(t *testing.T) {
-	srv := fixtureServer(t)
-	withBaseURL(t, srv.URL)
-	cfg, dailyLog := testConfig(t, true)
-	in, _ := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "daily_log_input.json"))
-	if err := os.WriteFile(dailyLog, in, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	stdout, _, err := run(t, "--config", cfg, "sync", "--json", "--date", "2026-06-16", "--days", "30")
-	if err != nil {
-		t.Fatalf("sync --json: %v", err)
-	}
-	var summary syncSummary
-	if err := json.Unmarshal([]byte(stdout), &summary); err != nil {
-		t.Fatalf("sync --json not valid JSON: %v\n%s", err, stdout)
-	}
-	if summary.Target != "2026-06-16" || summary.Days != 30 || summary.DryRun {
-		t.Errorf("summary header wrong: %+v", summary)
-	}
-	if summary.DroppedNonCardio != 5 {
-		t.Errorf("dropped_non_cardio = %d, want 5", summary.DroppedNonCardio)
-	}
-	if len(summary.Results) != 4 {
-		t.Fatalf("results = %d, want 4", len(summary.Results))
-	}
-	statuses := map[string]string{}
-	for _, r := range summary.Results {
-		statuses[r.Date] = r.Status
-	}
-	if statuses["2026-06-16"] != "conflict" || statuses["2026-06-02"] != "updated" {
-		t.Errorf("statuses = %v", statuses)
+	if !strings.Contains(stderr, "exercise data point(s)") {
+		t.Errorf("stderr missing count hint: %q", stderr)
 	}
 }
 
-func TestSyncDryRunDoesNotWrite(t *testing.T) {
-	srv := fixtureServer(t)
-	withBaseURL(t, srv.URL)
-	cfg, dailyLog := testConfig(t, true)
-	in, _ := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "daily_log_input.json"))
-	if err := os.WriteFile(dailyLog, in, 0o644); err != nil {
-		t.Fatal(err)
+func TestDataListUnknownTypeIsUsageError(t *testing.T) {
+	cfg := testConfig(t, true)
+	_, _, err := run(t, "--config", cfg, "data", "list", "not-a-type")
+	var exit *ExitError
+	if !errors.As(err, &exit) || exit.Code != ExitUsage {
+		t.Fatalf("err = %v, want ExitError code %d", err, ExitUsage)
 	}
+}
 
-	stdout, _, err := run(t, "--config", cfg, "sync", "--dry-run", "--date", "2026-06-16", "--days", "30")
+func TestTypesListJSON(t *testing.T) {
+	stdout, _, err := run(t, "types", "list", "--json")
 	if err != nil {
-		t.Fatalf("sync --dry-run: %v", err)
+		t.Fatalf("types list: %v", err)
 	}
-	if !strings.HasPrefix(stdout, "[dry-run] would write") {
-		t.Errorf("dry-run output missing tag: %q", stdout)
+	var views []map[string]any
+	if err := json.Unmarshal([]byte(stdout), &views); err != nil {
+		t.Fatalf("types list --json not valid JSON: %v", err)
 	}
-	after, _ := os.ReadFile(dailyLog)
-	if !bytes.Equal(after, in) {
-		t.Error("dry-run modified the daily log")
+	if len(views) != 31 {
+		t.Errorf("types list returned %d, want 31", len(views))
 	}
 }
 
 func TestDoctorValidToken(t *testing.T) {
-	cfg, _ := testConfig(t, true)
+	cfg := testConfig(t, true)
 	stdout, _, err := run(t, "--config", cfg, "doctor")
 	if err != nil {
 		t.Fatalf("doctor: %v", err)
@@ -213,7 +173,7 @@ func TestDoctorValidToken(t *testing.T) {
 }
 
 func TestDoctorNotAuthenticatedExits2(t *testing.T) {
-	cfg, _ := testConfig(t, false)
+	cfg := testConfig(t, false)
 	stdout, stderr, err := run(t, "--config", cfg, "doctor")
 	var exit *ExitError
 	if !errors.As(err, &exit) || exit.Code != ExitAuth {
@@ -232,7 +192,7 @@ func TestDoctorNotAuthenticatedExits2(t *testing.T) {
 }
 
 func TestAuthStatusJSON(t *testing.T) {
-	cfg, _ := testConfig(t, true)
+	cfg := testConfig(t, true)
 	stdout, _, err := run(t, "--config", cfg, "auth", "status", "--json")
 	if err != nil {
 		t.Fatalf("auth status: %v", err)
@@ -247,7 +207,7 @@ func TestAuthStatusJSON(t *testing.T) {
 }
 
 func TestAuthLogout(t *testing.T) {
-	cfg, _ := testConfig(t, true)
+	cfg := testConfig(t, true)
 	if _, _, err := run(t, "--config", cfg, "auth", "logout"); err != nil {
 		t.Fatalf("auth logout: %v", err)
 	}

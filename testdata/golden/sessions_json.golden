@@ -2,7 +2,6 @@
   {
     "date": "2026-05-18",
     "exercise_type": "ELLIPTICAL",
-    "elliptical": true,
     "duration_min": 46,
     "avg_hr": 142,
     "calories": 412,
@@ -11,7 +10,6 @@
   {
     "date": "2026-05-19",
     "exercise_type": "ELLIPTICAL",
-    "elliptical": true,
     "duration_min": 34,
     "avg_hr": 138,
     "calories": 277,
@@ -20,7 +18,6 @@
   {
     "date": "2026-05-24",
     "exercise_type": "CARDIO_WORKOUT",
-    "elliptical": false,
     "duration_min": 16,
     "avg_hr": 128,
     "calories": 87,
@@ -29,7 +26,6 @@
   {
     "date": "2026-05-30",
     "exercise_type": "STRENGTH_TRAINING",
-    "elliptical": false,
     "duration_min": 3,
     "avg_hr": null,
     "calories": 0,
@@ -38,7 +34,6 @@
   {
     "date": "2026-06-02",
     "exercise_type": "CARDIO_WORKOUT",
-    "elliptical": false,
     "duration_min": 16,
     "avg_hr": 134,
     "calories": 122,
@@ -47,7 +42,6 @@
   {
     "date": "2026-06-02",
     "exercise_type": "ELLIPTICAL",
-    "elliptical": true,
     "duration_min": 21,
     "avg_hr": 145,
     "calories": 189,
@@ -56,7 +50,6 @@
   {
     "date": "2026-06-15",
     "exercise_type": "STRENGTH_TRAINING",
-    "elliptical": false,
     "duration_min": 39,
     "avg_hr": null,
     "calories": 0,
@@ -65,7 +58,6 @@
   {
     "date": "2026-06-15",
     "exercise_type": "STRENGTH_TRAINING",
-    "elliptical": false,
     "duration_min": 42,
     "avg_hr": 107,
     "calories": 90,
@@ -74,7 +66,6 @@
   {
     "date": "2026-06-16",
     "exercise_type": "ELLIPTICAL",
-    "elliptical": true,
     "duration_min": 35,
     "avg_hr": 130,
     "calories": 236,

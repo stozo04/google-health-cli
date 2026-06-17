@@ -35,10 +35,9 @@ func (errNotAuthenticated) Error() string {
 	return "Not authenticated. Run:  google-health-cli auth login"
 }
 
-// apiClient resolves config, enforces the daily_log requirement (every Python
-// command loads config, which requires it — GOAL.md §7), loads the cached token,
-// and builds an authenticated, auto-refreshing API client. A missing/invalid
-// token yields notAuthenticated (exit 2).
+// apiClient resolves config, loads the cached token, and builds an
+// authenticated, auto-refreshing API client. A missing/invalid token yields
+// notAuthenticated (exit 2).
 //
 // The returned context carries the retry-backed base transport so the OAuth2
 // client layers token injection on top of it (GOAL.md §4).
@@ -46,9 +45,6 @@ func (a *App) apiClient(ctx context.Context) (*api.Client, *config.Config, error
 	cfg, err := a.resolveConfig()
 	if err != nil {
 		return nil, nil, err
-	}
-	if err := cfg.RequireDailyLog(); err != nil {
-		return nil, nil, withCode(ExitConfig, err)
 	}
 
 	tok, err := auth.LoadToken(cfg.TokenCache)

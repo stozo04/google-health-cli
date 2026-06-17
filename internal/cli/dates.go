@@ -29,21 +29,10 @@ func civilToday() time.Time {
 	return time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
 }
 
-// window ports cli.py:_window — the [start, end) civil window covering `days`
-// calendar days ending on target: start = midnight(target-(days-1)),
-// end = midnight(target+1).
+// window is the [start, end) civil window covering `days` calendar days ending
+// on target: start = midnight(target-(days-1)), end = midnight(target+1).
 func window(target time.Time, days int) (start, end time.Time) {
 	start = target.AddDate(0, 0, -(days - 1))
 	end = target.AddDate(0, 0, 1)
 	return start, end
-}
-
-// wantedDays is the set of YYYY-MM-DD strings from target back `days` days
-// (cli.py:cmd_sync `wanted`), used to restrict which buckets sync may touch.
-func wantedDays(target time.Time, days int) map[string]bool {
-	w := make(map[string]bool, days)
-	for i := 0; i < days; i++ {
-		w[target.AddDate(0, 0, -i).Format("2006-01-02")] = true
-	}
-	return w
 }

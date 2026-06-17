@@ -40,10 +40,6 @@ func elliptical() api.DataPoint {
 	return point("ELLIPTICAL", "2026-06-16T23:00:00Z", "2026-06-16T23:30:00Z", "122", 245, "1800s", "Elliptical")
 }
 
-func strength() api.DataPoint {
-	return point("STRENGTH_TRAINING", "2026-06-16T17:00:00Z", "2026-06-16T17:45:00Z", "110", 200, "2700s", "Strength training")
-}
-
 func TestParsePullsFields(t *testing.T) {
 	s := ParseSession(elliptical())
 	if s.ExerciseType != "ELLIPTICAL" {
@@ -66,30 +62,6 @@ func TestParsePullsFields(t *testing.T) {
 	}
 	if s.Platform != "FITBIT" {
 		t.Errorf("Platform = %q, want FITBIT", s.Platform)
-	}
-}
-
-func TestFilterIsAllowlist(t *testing.T) {
-	types := []string{"ELLIPTICAL"}
-	if !IsElliptical(ParseSession(elliptical()), types) {
-		t.Error("ELLIPTICAL should pass the allowlist")
-	}
-	if IsElliptical(ParseSession(strength()), types) {
-		t.Error("STRENGTH_TRAINING must not pass the allowlist")
-	}
-	// Unknown / missing type must NOT pass (no double-count).
-	if IsElliptical(Session{ExerciseType: ""}, types) {
-		t.Error("empty type must not pass")
-	}
-	if IsElliptical(Session{ExerciseType: "WALKING"}, types) {
-		t.Error("WALKING must not pass")
-	}
-	if IsElliptical(Session{ExerciseType: "CARDIO_WORKOUT"}, types) {
-		t.Error("CARDIO_WORKOUT must not pass")
-	}
-	// Case-insensitive compare.
-	if !IsElliptical(Session{ExerciseType: "elliptical"}, types) {
-		t.Error("lower-case elliptical should pass (case-insensitive)")
 	}
 }
 

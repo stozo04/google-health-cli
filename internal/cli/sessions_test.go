@@ -30,9 +30,10 @@ func fixturePoints(t *testing.T) []api.DataPoint {
 	t.Cleanup(srv.Close)
 
 	c := api.New(srv.Client(), srv.URL, "users/me", nil)
-	pts, err := c.ListExerciseDataPoints(context.Background(),
+	exercise, _ := api.LookupDataType("exercise")
+	pts, err := c.ListDataPoints(context.Background(), exercise,
 		time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC),
-		time.Date(2026, 6, 18, 0, 0, 0, 0, time.UTC))
+		time.Date(2026, 6, 18, 0, 0, 0, 0, time.UTC), true)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -48,6 +49,14 @@ func normalizeLF(b []byte) []byte {
 func assertGolden(t *testing.T, name string, got []byte) {
 	t.Helper()
 	path := filepath.Join("..", "..", "testdata", "golden", name)
+	// UPDATE_GOLDEN=1 rewrites the golden from the current output (goldens are
+	// stored LF). Used to (re)generate goldens the Python oracle can't produce.
+	if os.Getenv("UPDATE_GOLDEN") != "" {
+		if err := os.WriteFile(path, normalizeLF(got), 0o644); err != nil {
+			t.Fatalf("update golden %s: %v", name, err)
+		}
+		return
+	}
 	want, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read golden %s: %v", name, err)
@@ -60,7 +69,7 @@ func assertGolden(t *testing.T, name string, got []byte) {
 }
 
 func TestSessionsJSONGolden(t *testing.T) {
-	rows := buildSessionRows(fixturePoints(t), []string{"ELLIPTICAL"})
+	rows := buildSessionRows(fixturePoints(t))
 	var buf bytes.Buffer
 	if err := writeJSON(&buf, rows); err != nil {
 		t.Fatalf("writeJSON: %v", err)

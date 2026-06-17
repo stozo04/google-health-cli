@@ -29,48 +29,31 @@ func TestDefaults(t *testing.T) {
 	if got := cfg.User; got != DefaultUser {
 		t.Errorf("User = %q, want %q", got, DefaultUser)
 	}
-	if cfg.Zone2Low != DefaultZone2Low || cfg.Zone2High != DefaultZone2High {
-		t.Errorf("zone2 = %d-%d, want %d-%d", cfg.Zone2Low, cfg.Zone2High, DefaultZone2Low, DefaultZone2High)
+	if len(cfg.Scopes) != len(DefaultScopes) {
+		t.Errorf("Scopes = %v, want the %d default read scopes", cfg.Scopes, len(DefaultScopes))
 	}
-	if len(cfg.EllipticalTypes) != 1 || cfg.EllipticalTypes[0] != "ELLIPTICAL" {
-		t.Errorf("EllipticalTypes = %v, want [ELLIPTICAL]", cfg.EllipticalTypes)
-	}
-	if len(cfg.Scopes) != 1 || cfg.Scopes[0] != DefaultScope {
-		t.Errorf("Scopes = %v, want [%s]", cfg.Scopes, DefaultScope)
-	}
-	if cfg.DailyLog != "" {
-		t.Errorf("DailyLog = %q, want empty", cfg.DailyLog)
-	}
-	if err := cfg.RequireDailyLog(); err == nil {
-		t.Error("RequireDailyLog() = nil, want error when daily_log empty")
+	for i, s := range DefaultScopes {
+		if cfg.Scopes[i] != s {
+			t.Errorf("Scopes[%d] = %q, want %q", i, cfg.Scopes[i], s)
+		}
 	}
 }
 
 func TestFileOverridesDefaults(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
+	// A stale daily_log / elliptical_types is silently ignored (loose decode).
 	writeConfig(t, dir, `{
-	  "daily_log": "/some/DAILY_LOG.json",
-	  "elliptical_types": ["ELLIPTICAL", "ROWING"],
-	  "zone2_low": 100,
-	  "zone2_high": 140,
 	  "client_id": "cid-from-file",
 	  "base_url": "https://example.test",
 	  "user": "users/42",
-	  "ghealth_bin": "should-be-ignored"
+	  "scopes": ["https://www.googleapis.com/auth/googlehealth.sleep.readonly"],
+	  "daily_log": "should-be-ignored",
+	  "elliptical_types": ["ELLIPTICAL"]
 	}`)
 	cfg, err := Load(Options{})
 	if err != nil {
 		t.Fatalf("Load: %v", err)
-	}
-	if cfg.DailyLog != "/some/DAILY_LOG.json" {
-		t.Errorf("DailyLog = %q", cfg.DailyLog)
-	}
-	if len(cfg.EllipticalTypes) != 2 || cfg.EllipticalTypes[1] != "ROWING" {
-		t.Errorf("EllipticalTypes = %v", cfg.EllipticalTypes)
-	}
-	if cfg.Zone2Low != 100 || cfg.Zone2High != 140 {
-		t.Errorf("zone2 = %d-%d", cfg.Zone2Low, cfg.Zone2High)
 	}
 	if cfg.ClientID != "cid-from-file" {
 		t.Errorf("ClientID = %q", cfg.ClientID)
@@ -81,17 +64,16 @@ func TestFileOverridesDefaults(t *testing.T) {
 	if cfg.User != "users/42" {
 		t.Errorf("User = %q", cfg.User)
 	}
-	if err := cfg.RequireDailyLog(); err != nil {
-		t.Errorf("RequireDailyLog() = %v, want nil", err)
+	if len(cfg.Scopes) != 1 || cfg.Scopes[0] != "https://www.googleapis.com/auth/googlehealth.sleep.readonly" {
+		t.Errorf("Scopes = %v, want the single file-provided scope", cfg.Scopes)
 	}
 }
 
 func TestEnvOverridesFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
-	writeConfig(t, dir, `{"daily_log": "/from/file.json", "client_id": "file-cid", "base_url": "https://file.test"}`)
+	writeConfig(t, dir, `{"client_id": "file-cid", "base_url": "https://file.test"}`)
 
-	t.Setenv(EnvDailyLog, "/from/env.json")
 	t.Setenv(EnvClientID, "env-cid")
 	t.Setenv(EnvClientSecret, "env-secret")
 	t.Setenv(EnvBaseURL, "https://env.test")
@@ -99,9 +81,6 @@ func TestEnvOverridesFile(t *testing.T) {
 	cfg, err := Load(Options{})
 	if err != nil {
 		t.Fatalf("Load: %v", err)
-	}
-	if cfg.DailyLog != "/from/env.json" {
-		t.Errorf("DailyLog = %q, want env value", cfg.DailyLog)
 	}
 	if cfg.ClientID != "env-cid" {
 		t.Errorf("ClientID = %q, want env value", cfg.ClientID)
@@ -118,10 +97,10 @@ func TestFlagConfigPathWins(t *testing.T) {
 	// A config.json in CWD that should be ignored when --config points elsewhere.
 	cwd := t.TempDir()
 	t.Chdir(cwd)
-	writeConfig(t, cwd, `{"daily_log": "/cwd.json"}`)
+	writeConfig(t, cwd, `{"client_id": "cwd-cid"}`)
 
 	other := t.TempDir()
-	otherPath := writeConfig(t, other, `{"daily_log": "/flag.json"}`)
+	otherPath := writeConfig(t, other, `{"client_id": "flag-cid"}`)
 
 	// Env config should lose to the explicit flag path.
 	t.Setenv(EnvConfig, filepath.Join(cwd, "config.json"))
@@ -133,8 +112,8 @@ func TestFlagConfigPathWins(t *testing.T) {
 	if cfg.ConfigPath != otherPath {
 		t.Errorf("ConfigPath = %q, want %q", cfg.ConfigPath, otherPath)
 	}
-	if cfg.DailyLog != "/flag.json" {
-		t.Errorf("DailyLog = %q, want /flag.json", cfg.DailyLog)
+	if cfg.ClientID != "flag-cid" {
+		t.Errorf("ClientID = %q, want flag-cid", cfg.ClientID)
 	}
 }
 
@@ -143,15 +122,15 @@ func TestEnvConfigSelectsFile(t *testing.T) {
 	t.Chdir(cwd)
 	// No config.json in CWD; GOOGLE_HEALTH_CONFIG points at another file.
 	other := t.TempDir()
-	otherPath := writeConfig(t, other, `{"daily_log": "/env-config.json"}`)
+	otherPath := writeConfig(t, other, `{"client_id": "env-config-cid"}`)
 	t.Setenv(EnvConfig, otherPath)
 
 	cfg, err := Load(Options{})
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.DailyLog != "/env-config.json" {
-		t.Errorf("DailyLog = %q, want /env-config.json", cfg.DailyLog)
+	if cfg.ClientID != "env-config-cid" {
+		t.Errorf("ClientID = %q, want env-config-cid", cfg.ClientID)
 	}
 }
 
