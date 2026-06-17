@@ -3,8 +3,9 @@ name: google-health-cli
 description: >
   Read your Google Health data from any agent. Lists data points for every Google
   Health data type (heart rate, resting heart rate, sleep, steps, distance, weight,
-  blood oxygen, VO2 max, exercise, and more), gives a parsed view of exercise
-  sessions, and can GET any read-only v4 API path. A self-contained, read-only
+  blood oxygen, VO2 max, exercise, and more), returns server-side daily roll-ups
+  (one reconciled total per day), gives a parsed view of exercise sessions, and can
+  GET any read-only v4 API path. A self-contained, read-only
   client for the Google Health v4 API: authenticates via OAuth2 (token cached
   locally and auto-refreshed) and emits JSON. It does NO filtering, merging, or
   writing — the caller decides what to do with the data. Single static binary, no
@@ -135,8 +136,34 @@ Example (`data list daily-resting-heart-rate`):
 ]
 ```
 
-A few types are rollup/reconcile-only and cannot be listed (`types list` marks listable ones
-with `*`); `data list` rejects those with a clear message.
+A few types are roll-up/reconcile-only and can't be `list`ed (`types list` marks listable ones
+with `*`); read those with `rollup daily <type>` instead (below).
+
+### Daily roll-ups (server-side totals)
+
+```bash
+google-health-cli rollup daily steps --days 7           # one reconciled total per civil day
+google-health-cli rollup daily active-minutes --days 7   # a roll-up-only type (no `data list`)
+```
+
+`rollup daily <type>` returns the API's **daily roll-up** rows — one value per civil (local)
+calendar day — instead of the raw per-minute/per-sample points `data list` returns. It's the cheap
+way to get daily totals (e.g. a `steps` total per day rather than a per-minute dump) and the **only**
+way to read the roll-up-only types that have no `list` op (`active-minutes`, `total-calories`,
+`floors`, `calories-in-heart-rate-zone`, `time-in-heart-rate-zone`). stdout is a JSON array of the
+raw roll-up rows; an `N <type> daily rollup(s)` count goes to stderr. Each value is **reconciled
+across data sources** (and excludes off-wrist intervals), so it is *not* a naive sum of `data list`
+points. Window flags mirror `data list` minus `--all` (the range is required).
+
+```json
+[
+  {
+    "civilStartTime": { "date": { "year": 2026, "month": 6, "day": 16 }, "time": {} },
+    "civilEndTime":   { "date": { "year": 2026, "month": 6, "day": 17 }, "time": {} },
+    "steps": { "countSum": "8000" }
+  }
+]
+```
 
 ### Parsed exercise sessions (convenience)
 
@@ -169,6 +196,7 @@ google-health-cli api get /v4/users/me/settings
 | `doctor` | Config + token validity (exit 2 if not authed) | always |
 | `types list \| describe <type>` | Inspect the data-type catalog (no network) | ✓ |
 | `data list <type>` | List data points for a type (always JSON) | n/a (always) |
+| `rollup daily <type>` | Server-side daily totals, reconciled per civil day | n/a (always) |
 | `sessions [--days N] [--raw]` | Parsed exercise sessions (convenience) | ✓ |
 | `api get <path>` | Raw read-only GET of any v4 path | n/a |
 | `config show \| path` | Inspect resolved config (`client_secret` masked) | `show` |
