@@ -1,8 +1,7 @@
-// Command google-health-cli pulls exercise sessions from the Google Health API
-// (read-only OAuth2), filters them to a configurable allowlist of exercise types
-// (elliptical / cross-trainer by default), and upserts the matches into a JSON
-// daily-log file. It is self-contained — it owns its own OAuth2 + HTTP and
-// requires no external helper binary.
+// Command google-health-cli is a self-contained, read-only client for the Google
+// Health v4 API: it owns OAuth2 login and the HTTP wire, reads data points for any
+// data type, and emits JSON. It does no filtering or writing — callers parse what
+// they need. No external helper binary required.
 //
 // This entrypoint is deliberately thin: it owns the ldflags version vars (the
 // linker's -X only reaches package main), wires a cancelable context for Ctrl-C,
