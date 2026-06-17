@@ -47,6 +47,44 @@ The time filter is built on the type's default time field, formatted per record 
 RFC3339 instant, or date-only). Unknown type → exit `64`. A rollup/reconcile-only type (no `list`
 operation) → exit `64` with a message. If the API rejects the filter, re-run with `--all`.
 
+## `rollup daily <type>` (server-side daily totals)
+
+Returns the API's **daily rollup** rows — one reconciled value per civil (local) calendar day — instead of
+the raw per-minute/per-sample points `data list` returns. Use it to get daily totals cheaply (e.g. a
+`steps` total per day rather than ~1 MB/week of per-minute points), and as the **only** way to read the
+rollup-only types that have no `list` operation (`active-minutes`, `total-calories`, `floors`,
+`calories-in-heart-rate-zone`, `time-in-heart-rate-zone`). Read-only: `dailyRollUp` is an HTTP POST but a
+pure query, no write scopes.
+
+**stdout is always a JSON array of the raw rollup rows** (verbatim, never reshaped); a one-line
+`N <type> daily rollup(s)` count goes to stderr. `--json` is accepted but a no-op.
+
+```sh
+google-health-cli rollup daily steps --days 7
+```
+
+```json
+[
+  {
+    "civilStartTime": { "date": { "year": 2026, "month": 6, "day": 16 }, "time": {} },
+    "civilEndTime":   { "date": { "year": 2026, "month": 6, "day": 17 }, "time": {} },
+    "steps": { "countSum": "8000" }
+  }
+]
+```
+
+Each row carries `civilStartTime`/`civilEndTime` (the `[day, day+1)` civil window it aggregates) and one
+type-specific value (`steps.countSum`, `totalCalories.kcalSum`, `distance.millimetersSum`,
+`activeMinutes.activeMinutesRollupByActivityLevel[]`, …). Bucketing is on the **civil/local calendar day**
+(the request uses zone-free civil dates), and each value is **reconciled across all data sources and
+excludes off-wrist intervals** — so it does *not* equal a naive sum of `data list` points (those are
+unreconciled and double-count overlapping sources). Prefer this over re-summing raw points.
+
+Window flags mirror `data list` (`--date`/`--days` default, or explicit `--from`/`--to`), minus `--all`:
+`dailyRollUp` requires a bounded range. The API caps the range per type (e.g. **90 days for `steps`**); an
+over-long window → exit `2` with the API's `…must not exceed N days` detail. Unknown type → exit `64`. A
+type that does not support `dailyRollUp` → exit `64` with a message pointing to `data list`.
+
 ## `types list` / `types describe <type>`
 
 Discovery, no network. `types list --json` is an array; `types describe <type> --json` is one object. Key
