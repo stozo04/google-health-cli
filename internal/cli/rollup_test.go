@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,23 +12,28 @@ import (
 	"testing"
 )
 
-// rollupFixtureServer serves the committed steps rollup fixture for any request.
-func rollupFixtureServer(t *testing.T) *httptest.Server {
+// rollupFixtureServer serves the committed steps rollup fixture for any request,
+// recording each request body into *reqBody so a test can assert the outgoing
+// civil range the window flags produced.
+func rollupFixtureServer(t *testing.T) (srv *httptest.Server, reqBody *string) {
 	t.Helper()
 	body, err := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "steps_rollup.json"))
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	var captured string
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		captured = string(b)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(body)
 	}))
 	t.Cleanup(srv.Close)
-	return srv
+	return srv, &captured
 }
 
 func TestRollupDailyCommand(t *testing.T) {
-	srv := rollupFixtureServer(t)
+	srv, reqBody := rollupFixtureServer(t)
 	withBaseURL(t, srv.URL)
 	cfg := testConfig(t, true)
 
@@ -45,10 +51,17 @@ func TestRollupDailyCommand(t *testing.T) {
 	if !strings.Contains(stderr, "steps daily rollup(s)") {
 		t.Errorf("stderr missing count hint: %q", stderr)
 	}
+	// --date 2026-06-16 --days 2 must roll up the civil window [2026-06-15,
+	// 2026-06-17): pins that the rollup command feeds the window flags through
+	// to the outgoing dailyRollUp range, not just that some request was made.
+	if !strings.Contains(*reqBody, `"start":{"date":{"year":2026,"month":6,"day":15}}`) ||
+		!strings.Contains(*reqBody, `"end":{"date":{"year":2026,"month":6,"day":17}}`) {
+		t.Errorf("outgoing rollup range wrong for --date 2026-06-16 --days 2: %s", *reqBody)
+	}
 }
 
 func TestRollupDailyGolden(t *testing.T) {
-	srv := rollupFixtureServer(t)
+	srv, _ := rollupFixtureServer(t)
 	withBaseURL(t, srv.URL)
 	cfg := testConfig(t, true)
 
