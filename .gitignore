@@ -1,5 +1,28 @@
+# Secrets & local state (GOAL.md §2, §7) — never commit credentials or tokens.
 config.json
+token.json
+.token.json
+
+# The live data document and any local copies/backups.
+DAILY_LOG.json
+DAILY_LOG.backup.*.json
+
+# Local capture scratch (real, un-anonymized API responses).
+.capture/
+
+# Build output.
+/bin/
+/dist/
+/google-health-cli
+/google-health-cli.exe
+*.exe
+
+# Go test/coverage artifacts.
+*.out
+coverage.txt
+
+# Editor/OS noise.
+.DS_Store
+.idea/
+.vscode/
 __pycache__/
-*.pyc
-.venv/
-*.raw.json

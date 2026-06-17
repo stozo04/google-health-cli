@@ -1,0 +1,100 @@
+{
+  "user": "Steven",
+  "started": "2026-05-10",
+  "targets": {
+    "calories": 2100,
+    "protein_g": 165
+  },
+  "notes": "Test input doc for the DAILY_LOG write golden. Mix of days exercises every upsert path: new-day insert, add-training-to-existing, update-in-place, and the manual-session conflict guard. The <,> in this note also proves HTML escaping stays off.",
+  "days": [
+    {
+      "date": "2026-05-10",
+      "weekday": "Sun",
+      "partial": false,
+      "nutrition": {
+        "calories_food": 1800
+      },
+      "training": {
+        "session": "Pull",
+        "completed": true,
+        "source": "manual",
+        "notes": "Untouched manual strength day."
+      },
+      "body": {
+        "weight_lb": 181.4,
+        "waist_in": null
+      },
+      "watch": {
+        "sleep_hrs": 7.5,
+        "resting_hr": 58,
+        "steps": 9123
+      }
+    },
+    {
+      "date": "2026-05-19",
+      "weekday": "Tue",
+      "partial": true,
+      "nutrition": {
+        "calories_food": 1620,
+        "protein_g": 140
+      },
+      "watch": {
+        "sleep_hrs": null,
+        "resting_hr": null,
+        "steps": null
+      }
+    },
+    {
+      "date": "2026-06-02",
+      "weekday": "Tue",
+      "partial": true,
+      "training": {
+        "session": "Zone 2 elliptical",
+        "type": "cardio",
+        "completed": true,
+        "source": "ghealth",
+        "duration_min": 99,
+        "avg_hr": 111,
+        "calories": 1,
+        "zone2": "stale - should be overwritten"
+      },
+      "body": {
+        "weight_lb": null,
+        "waist_in": null
+      },
+      "watch": {
+        "sleep_hrs": null,
+        "resting_hr": null,
+        "steps": null
+      }
+    },
+    {
+      "date": "2026-06-16",
+      "weekday": "Tue",
+      "partial": true,
+      "training": {
+        "session": "Push",
+        "completed": true,
+        "source": "manual",
+        "notes": "Manual session — the conflict guard must leave this untouched."
+      },
+      "body": {
+        "weight_lb": null,
+        "waist_in": null
+      },
+      "watch": {
+        "sleep_hrs": null,
+        "resting_hr": null,
+        "steps": null
+      }
+    },
+    {
+      "date": "2026-06-20",
+      "weekday": "Sat",
+      "partial": false,
+      "nutrition": {
+        "calories_food": 2050
+      }
+    }
+  ]
+}

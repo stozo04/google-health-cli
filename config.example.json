@@ -1,7 +1,8 @@
 {
-  "ghealth_bin": "ghealth",
-  "daily_log": "C:\\path\\to\\DAILY_LOG.json",
+  "daily_log": "C:\\path\\to\\personal-workout-ai\\DAILY_LOG.json",
   "elliptical_types": ["ELLIPTICAL"],
   "zone2_low": 110,
-  "zone2_high": 130
+  "zone2_high": 130,
+  "client_id": "PASTE_GOOGLE_OAUTH_CLIENT_ID",
+  "client_secret": "PASTE_GOOGLE_OAUTH_CLIENT_SECRET"
 }

@@ -1,9 +1,8 @@
 # Google Health API — OAuth setup (one time, ~10 min)
 
-Goal: let `ghealth` read **your own** Google Health data (the elliptical sessions
-your watch logs) using read-only OAuth. You create a personal Google Cloud
-project, enable the Google Health API, and authorize it for your own account in
-**Testing** mode. No fees, no app review for personal use.
+Goal: let `google-health-cli` read **your own** Google Health data (the elliptical sessions your watch logs)
+using read-only OAuth. You create a personal Google Cloud project, enable the Google Health API, and authorize
+it for your own account in **Testing** mode. No fees, no app review for personal use.
 
 > Use the **same Google account that owns your watch data**
 > (`gates.steven@gmail.com`) everywhere below.
@@ -32,27 +31,38 @@ project, enable the Google Health API, and authorize it for your own account in
 ## 4. Create an OAuth client
 1. **APIs & Services → Credentials → Create Credentials → OAuth client ID**.
 2. Application type: **Desktop app**  ← important (gives a client secret +
-   loopback redirect, which ghealth needs).
-3. Name it `ghealth-cli` → **Create**.
+   loopback redirect, which the loopback login flow needs).
+3. Name it `google-health-cli` → **Create**.
 4. Copy the **Client ID** and **Client secret** (or download the JSON).
 
-## 5. Point ghealth at the client + log in
-In PowerShell:
-```powershell
-$g = "C:\Users\gates\Personal\ghealth\ghealth.exe"
-& $g config set client-id     "PASTE_CLIENT_ID"
-& $g config set client-secret "PASTE_CLIENT_SECRET"
-& $g auth login          # read-only scopes by default — do NOT add --write
+## 5. Point google-health-cli at the client + log in
+Put the client id/secret in `config.json` (next to `daily_log`):
+
+```json
+{
+  "daily_log": "C:\\Users\\gates\\Personal\\personal-workout-ai\\DAILY_LOG.json",
+  "client_id": "PASTE_CLIENT_ID",
+  "client_secret": "PASTE_CLIENT_SECRET"
+}
 ```
+
+(Or set `GOOGLE_HEALTH_CLIENT_ID` / `GOOGLE_HEALTH_CLIENT_SECRET` in the environment instead.) Then:
+
+```sh
+google-health-cli auth login     # read-only scopes by default — there is no write mode
+```
+
 `auth login` opens a browser:
 1. Sign in as `gates.steven@gmail.com`.
 2. You'll see **"Google hasn't verified this app."** This is expected — it's your
    own project. Click **Advanced → Go to ghealth-personal (unsafe)**.
 3. Grant the read-only Google Health permissions.
 
+The token is cached locally (owner-only, `0600`) and auto-refreshed on use.
+
 ## 6. Confirm
-```powershell
-& $g doctor      # expect  "tokenValid": true
+```sh
+google-health-cli doctor      # expect  "tokenValid": true
 ```
 Then tell Claude — everything after this runs locally on this machine.
 
