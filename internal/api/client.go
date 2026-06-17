@@ -157,11 +157,30 @@ func (c *Client) get(ctx context.Context, reqURL string) (*listResponse, error) 
 }
 
 // errorMessage extracts Google's error-envelope message, falling back to a
-// generic HTTP status description.
+// generic HTTP status description. When the envelope carries BadRequest
+// fieldViolations (e.g. an over-long rollup range), their descriptions are
+// appended so the user sees the actionable detail, not just "Invalid argument".
 func errorMessage(body []byte, status int) string {
 	var ae apiError
 	if err := json.Unmarshal(body, &ae); err == nil && ae.Error.Message != "" {
-		return ae.Error.Message
+		msg := ae.Error.Message
+		var violations []string
+		for _, d := range ae.Error.Details {
+			for _, fv := range d.FieldViolations {
+				if fv.Description == "" {
+					continue
+				}
+				if fv.Field != "" {
+					violations = append(violations, fv.Field+": "+fv.Description)
+				} else {
+					violations = append(violations, fv.Description)
+				}
+			}
+		}
+		if len(violations) > 0 {
+			msg += " (" + strings.Join(violations, "; ") + ")"
+		}
+		return msg
 	}
 	snippet := strings.TrimSpace(string(body))
 	if len(snippet) > 300 {

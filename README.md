@@ -53,6 +53,9 @@ google-health-cli data list steps --date 2026-06-16 # a specific civil day
 google-health-cli data list weight --from 2026-01-01T00:00:00Z --to 2026-07-01T00:00:00Z
 google-health-cli data list daily-resting-heart-rate --all   # everything, no time filter
 
+google-health-cli rollup daily steps --days 7       # server-side daily totals (not 1 MB of raw points)
+google-health-cli rollup daily active-minutes --days 7  # a rollup-only type (no `data list`)
+
 google-health-cli sessions --days 14               # parsed exercise sessions (convenience)
 google-health-cli sessions --raw                    # raw exercise data points
 google-health-cli api get /v4/users/me/profile      # raw read-only GET for anything else
@@ -84,8 +87,11 @@ Notes:
 - **`sleep`** filters on `civil_end_time` (its start time is not a valid filter member) — handled for you.
 - A few types are **rollup/reconcile-only** and cannot be listed (e.g. `total-calories`,
   `time-in-heart-rate-zone`). `data list` rejects them with a clear message; `types list` marks the
-  listable ones with `*`.
+  listable ones with `*`. Read them with **`rollup daily <type>`** instead.
 - If a type rejects server-side filtering, re-run with `--all` and filter client-side.
+- **`rollup daily <type>`** returns one server-reconciled value per civil day (a `dailyRollUp` query) —
+  the cheap way to get daily totals and the only way to reach the rollup-only types. The value is
+  reconciled across data sources, so it is *not* a naive sum of `data list` points.
 
 ## Configuration
 

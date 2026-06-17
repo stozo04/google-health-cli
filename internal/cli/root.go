@@ -42,6 +42,7 @@ func NewRootCmd() *cobra.Command {
 			"callers get the data and parse whatever they care about.\n\n" +
 			"  types list|describe   discover the data types you can read\n" +
 			"  data list <type>      read data points (heart-rate, sleep, steps, exercise, …)\n" +
+			"  rollup daily <type>   server-side daily totals (steps, active-minutes, …)\n" +
 			"  sessions              parsed exercise sessions (convenience)\n" +
 			"  api get <path>        raw read-only GET for anything else (profile, settings, …)",
 		// Runtime failures print one error line to stderr ourselves; never dump
@@ -79,6 +80,7 @@ func addCommands(app *App, root *cobra.Command) {
 		newDoctorCmd(app),
 		newTypesCmd(app),
 		newDataCmd(app),
+		newRollupCmd(app),
 		newSessionsCmd(app),
 		newAPICmd(app),
 		newAuthCmd(app),

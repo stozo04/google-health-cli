@@ -57,11 +57,20 @@ type listResponse struct {
 	NextPageToken string            `json:"nextPageToken"`
 }
 
-// apiError is Google's error envelope: {"error":{"code","message","status"}}.
+// apiError is Google's error envelope: {"error":{"code","message","status",
+// "details":[…]}}. The details array is heterogeneous (ErrorInfo, BadRequest, …);
+// we pluck the human-readable BadRequest fieldViolations, which carry the
+// actionable text — e.g. the rollup range exceeding a type's max duration.
 type apiError struct {
 	Error struct {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
 		Status  string `json:"status"`
+		Details []struct {
+			FieldViolations []struct {
+				Field       string `json:"field"`
+				Description string `json:"description"`
+			} `json:"fieldViolations"`
+		} `json:"details"`
 	} `json:"error"`
 }
