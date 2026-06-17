@@ -36,10 +36,10 @@ func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "google-health-cli",
 		Short: "Sync Google Health elliptical cardio into DAILY_LOG.json",
-		Long: "google-health-cli pulls your elliptical / cross-trainer sessions from the\n" +
-			"Google Health API (read-only OAuth2) and upserts them into a personal-workout-ai\n" +
-			"DAILY_LOG.json. Strength sessions are dropped so speediance-cli stays the single\n" +
-			"owner of that work. It is self-contained — no `ghealth` binary required.",
+		Long: "google-health-cli pulls your exercise sessions from the Google Health API\n" +
+			"(read-only OAuth2), filters them to a configurable allowlist of exercise types\n" +
+			"(elliptical / cross-trainer by default), and upserts the matches into a JSON\n" +
+			"daily-log file. It is self-contained — no external helper binary required.",
 		// Runtime failures print one error line to stderr ourselves; never dump
 		// usage on them, and never let cobra also print the error (GOAL.md §12).
 		SilenceUsage:  true,

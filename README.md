@@ -1,18 +1,11 @@
 # google-health-cli
 
-The **cardio** counterpart to [`speediance-cli`](https://github.com/stozo04/speediance-cli) — a single,
-statically-compiled Go binary that pulls your **elliptical / cross-trainer** sessions from the
-**Google Health API** and writes them into `personal-workout-ai`'s `DAILY_LOG.json`.
+A single, statically-compiled Go binary that reads your exercise sessions from the **Google Health API**
+over read-only OAuth2, filters them to a configurable allowlist of exercise types, and upserts the matches
+into a JSON daily-log file.
 
-- `speediance-cli` pulls **strength** sessions from the Speediance cloud → writes weights/reps into `WEEKS/Week-XX.md`.
-- `google-health-cli` pulls **elliptical** sessions from the **Google Health API** → upserts them into `DAILY_LOG.json`.
-
-Your Pixel Watch logs **both** the elliptical and the Speediance strength workouts into Google Health, so the
-core job of this tool is the **dedup filter**: keep **only** elliptical/cross-trainer sessions and drop strength
-training, otherwise it would double-count the strength work `speediance-cli` already owns.
-
-It is **self-contained**: it talks directly to the Google Health API over OAuth2. No Python interpreter and no
-`ghealth` binary are required.
+It is **self-contained**: it talks directly to the Google Health API over OAuth2. No Python interpreter and
+no external helper binary are required.
 
 ## How it works
 
@@ -23,15 +16,16 @@ GET https://health.googleapis.com/v4/users/me/dataTypes/exercise/dataPoints   (r
   parse each session  →  exercise_type, start, duration, avg HR, calories
         │
         ▼
-  ALLOWLIST filter: keep exercise_type ∈ config.elliptical_types
-  (everything else — STRENGTH_TRAINING, CARDIO_WORKOUT, … — is ignored)
+  allowlist filter: keep exercise_type ∈ config.elliptical_types
+  (every other session the API returns is dropped)
         │
         ▼
-  merge by local date  →  upsert a `cardio` training object into DAILY_LOG.json
+  merge by local date  →  upsert a training object into the daily-log JSON
 ```
 
-Avg heart rate is the field that matters most. Steven's Zone 2 target is **110–130 bpm**, and **every**
-elliptical session is logged regardless of heart rate — the band is a calm `zone2` readout, never a filter.
+The allowlist (`elliptical_types`) is the core filter: only the listed exercise types are kept; everything
+else is ignored. Average heart rate is reported against a configurable Zone 2 band
+(`zone2_low`–`zone2_high`) — the band is a readout only and never filters sessions.
 
 ## Install
 
@@ -55,7 +49,7 @@ go install github.com/stozo04/google-health-cli/cmd/google-health-cli@latest
 
 ```sh
 google-health-cli doctor                      # config + token check (JSON; exit 2 if not authenticated)
-google-health-cli sessions --days 14          # list all sessions; * marks cardio
+google-health-cli sessions --days 14          # list all sessions; * marks an allowlisted (cardio) session
 google-health-cli sessions --raw              # dump raw API JSON (for debugging)
 google-health-cli sessions --json             # machine-readable rows
 google-health-cli sync --dry-run              # preview what would be written
@@ -78,8 +72,8 @@ and logs go to stderr.
 
 ## What it writes
 
-Cardio is "just a different type of training", so it goes into the day's `training` object (same shape as a
-strength session, tagged `"type": "cardio"`):
+Each matched session is written into the day's `training` object in the daily-log JSON, tagged
+`"type": "cardio"`:
 
 ```json
 "training": {
@@ -94,8 +88,9 @@ strength session, tagged `"type": "cardio"`):
 }
 ```
 
-The `DAILY_LOG.json` write is byte-for-byte compatible with the previous Python tool (key order preserved, the
-`"source": "ghealth"` marker kept, existing line endings preserved), so the diff stays clean.
+`sync` targets a specific `DAILY_LOG.json` shape. The write is intentionally diff-stable — existing keys,
+key order, the `"source": "ghealth"` marker, and the file's existing line endings are all preserved on write.
+See **[AGENTS.md](AGENTS.md)** for the exact contract.
 
 ## Configuration
 

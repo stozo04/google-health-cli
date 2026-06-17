@@ -1,6 +1,6 @@
 # AGENTS.md — machine contract for google-health-cli
 
-This file documents the stable surfaces that automation (the Monday check-in, agents) depends on. **stdout is
+This file documents the stable surfaces that automation and agents depend on. **stdout is
 data; stderr is hints/logs/errors.** Pass `--json` for machine-readable output.
 
 ## Exit codes

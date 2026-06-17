@@ -4,8 +4,8 @@ Goal: let `google-health-cli` read **your own** Google Health data (the elliptic
 using read-only OAuth. You create a personal Google Cloud project, enable the Google Health API, and authorize
 it for your own account in **Testing** mode. No fees, no app review for personal use.
 
-> Use the **same Google account that owns your watch data**
-> (`gates.steven@gmail.com`) everywhere below.
+> Use the **same Google account that owns your watch data** (the account your watch syncs to)
+> everywhere below.
 
 ## 1. Create a project
 1. Go to <https://console.cloud.google.com/>.
@@ -24,7 +24,7 @@ it for your own account in **Testing** mode. No fees, no app review for personal
 3. App name: `ghealth-personal`. User support email + developer email: your email.
 4. Save through the steps. On the **Audience** / publishing screen, leave
    **Publishing status = Testing**.
-5. **Test users → Add users →** `gates.steven@gmail.com` → Save.
+5. **Test users → Add users →** your own Google account → Save.
    (Testing mode + you as a test user is what lets you authorize the restricted
    health scopes without a production review.)
 
@@ -40,7 +40,7 @@ Put the client id/secret in `config.json` (next to `daily_log`):
 
 ```json
 {
-  "daily_log": "C:\\Users\\gates\\Personal\\personal-workout-ai\\DAILY_LOG.json",
+  "daily_log": "C:\\path\\to\\DAILY_LOG.json",
   "client_id": "PASTE_CLIENT_ID",
   "client_secret": "PASTE_CLIENT_SECRET"
 }
@@ -53,7 +53,7 @@ google-health-cli auth login     # read-only scopes by default — there is no w
 ```
 
 `auth login` opens a browser:
-1. Sign in as `gates.steven@gmail.com`.
+1. Sign in as that same Google account.
 2. You'll see **"Google hasn't verified this app."** This is expected — it's your
    own project. Click **Advanced → Go to ghealth-personal (unsafe)**.
 3. Grant the read-only Google Health permissions.

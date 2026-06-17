@@ -1,14 +1,12 @@
-// Command google-health-cli pulls elliptical cardio sessions from the Google
-// Health API and upserts them into a personal-workout-ai DAILY_LOG.json. It is
-// a self-contained, drop-in replacement for the Python google-health-cli: same
-// commands, same --json contracts, same DAILY_LOG.json writes, but it owns its
-// own OAuth2 + HTTP instead of shelling out to the `ghealth` binary. See GOAL.md
-// for the full specification.
+// Command google-health-cli pulls exercise sessions from the Google Health API
+// (read-only OAuth2), filters them to a configurable allowlist of exercise types
+// (elliptical / cross-trainer by default), and upserts the matches into a JSON
+// daily-log file. It is self-contained — it owns its own OAuth2 + HTTP and
+// requires no external helper binary.
 //
-// This entrypoint is deliberately thin (GOAL.md §5): it owns the ldflags version
-// vars (the linker's -X only reaches package main), wires a cancelable context
-// for Ctrl-C, runs the cobra tree, and maps the resulting error to a single
-// process exit code.
+// This entrypoint is deliberately thin: it owns the ldflags version vars (the
+// linker's -X only reaches package main), wires a cancelable context for Ctrl-C,
+// runs the cobra tree, and maps the resulting error to a single process exit code.
 package main
 
 import (

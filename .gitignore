@@ -10,6 +10,10 @@ DAILY_LOG.backup.*.json
 # Local capture scratch (real, un-anonymized API responses).
 .capture/
 
+# Local-only notes — personal context, kept on disk, never published.
+HANDOFF.md
+CLAUDE.md
+
 # Build output.
 /bin/
 /dist/
