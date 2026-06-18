@@ -18,14 +18,13 @@ external helper binary.
 
 It is a **dumb data collector**: it returns the API's data points verbatim and does **no** filtering,
 merging, labeling, or interpretation. Every consuming agent gets all the data and derives whatever it cares
-about. In particular, **personal-workout-ai** (Steven's workout agent) is the consumer that owns all the
-personal logic — keeping elliptical sessions, computing Zone-2 bands, merging, and storing into its own
-`DAILY_LOG.json`. None of that lives here. (This tool used to do that sync itself; that was the wrong
-ownership and was removed.)
+about. For example, a downstream workout agent is the consumer that owns all the personal logic — keeping
+elliptical sessions, computing Zone-2 bands, merging, and storing into its own log. None of that lives here.
+(This tool used to do that sync itself; that was the wrong ownership and was removed.)
 
-`ghealth` (formerly at `C:\Users\gates\Personal\ghealth\ghealth.exe`) was a **reference only** — a prior Go
-CLI for the same API, used to learn the data-type catalog and filter syntax. It had **zero runtime
-dependency** and was **deleted on 2026-06-17** (binary + its `%AppData%\ghealth` config/token store).
+A prior Go CLI for the same API (`ghealth`) was used as a **reference only** — to learn the data-type
+catalog and filter syntax. It had **zero runtime dependency** and has since been deleted; this tool is fully
+self-contained and owes it nothing at runtime.
 
 ## Invariants — don't break these
 
@@ -62,8 +61,10 @@ dependency** and was **deleted on 2026-06-17** (binary + its `%AppData%\ghealth`
 | `make lint` / `make fmt` / `make vet` | golangci-lint / gofumpt+goimports / go vet |
 | `make check` | Full pre-commit gauntlet: `tidy fmt vet lint test-race` |
 
-Go is not on PATH on this machine. Prepend both:
-`$env:Path = "C:\Users\gates\go-sdk\go\bin;C:\Users\gates\go\bin;$env:Path"`.
+Go must be on your `PATH`, along with `$(go env GOPATH)/bin` (where `make lint`/`fmt` tools like
+`gofumpt` and `golangci-lint` install). If they aren't, prepend them for the session — e.g. in PowerShell,
+substituting your own Go install path:
+`$env:Path = "C:\path\to\go\bin;$(go env GOPATH)\bin;$env:Path"`.
 
 **Goldens:** `make golden` (the old Python oracle) is obsolete — the Python sources are gone. Regenerate the
 Go-produced goldens with `UPDATE_GOLDEN=1 go test ./internal/cli/` (see `assertGolden`).

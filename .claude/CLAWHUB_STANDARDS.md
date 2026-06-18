@@ -47,6 +47,13 @@ gap, and to back every promise with a guard that fails the build.
    **fails the build** — an init-time check, a unit test, or a lint rule — not prose alone. A
    standards doc prevents *writing* the violation; only a guard prevents *shipping* it. When you
    document a rule here, add (or point to) its guard.
+7. **Documentation paths must be community-friendly — never machine-specific.** Any path in
+   tracked docs, comments, examples, or commit messages must be **generic and portable**: no
+   absolute paths, no home directories, no usernames, no machine-local install locations (e.g.
+   `C:\Users\<name>\...`, `/home/<name>/...`, `%AppData%\...`). Use repo-relative paths,
+   placeholders (`<path-to-go>`, `$(go env GOPATH)`, `~`), or environment variables instead.
+   Leaking a local layout is noise to contributors and a minor info-disclosure smell; treat the
+   docs as if a stranger will read them, because once published they will.
 
 ## Pre-publish / pre-merge checklist
 
@@ -55,6 +62,7 @@ gap, and to back every promise with a guard that fails the build.
 - [ ] Every sensitive-output command is covered by a privacy warning in the skill docs.
 - [ ] No hidden instructions, deceptive Unicode, or injection text in descriptions/examples.
 - [ ] Network egress and file access match the declared `permissions` block exactly.
+- [ ] No absolute paths, home dirs, usernames, or machine-local locations in tracked docs/comments/examples.
 - [ ] Each of the above is enforced by a test or startup guard, not just documented.
 - [ ] `make check` (or the repo's equivalent) is green.
 
