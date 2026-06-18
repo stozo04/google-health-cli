@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/stozo04/google-health-cli/internal/auth"
 	"github.com/stozo04/google-health-cli/internal/config"
 	"github.com/stozo04/google-health-cli/internal/version"
 )
@@ -100,6 +101,19 @@ func (a *App) resolveConfig() (*config.Config, error) {
 	if err != nil {
 		return nil, withCode(ExitConfig, err)
 	}
+
+	// When the token cache fell through to the default (non-roaming cache dir),
+	// relocate a token left at the previous default (the roaming config dir) so
+	// upgrading users keep their session without re-authenticating. Conservative
+	// and best-effort (CLI conventions §7); a failure just means a fresh login.
+	if cfg.TokenCacheIsDefault {
+		if moved, merr := auth.MigrateLegacyToken(cfg.TokenCache, config.LegacyTokenCachePath()); merr != nil {
+			a.logger.Warn("could not migrate token cache out of the roaming dir", "err", merr)
+		} else if moved {
+			a.logger.Warn("relocated token cache to the non-roaming user cache dir", "path", cfg.TokenCache)
+		}
+	}
+
 	a.cfg = cfg
 	return cfg, nil
 }

@@ -17,17 +17,19 @@ func writeConfig(t *testing.T, dir, body string) string {
 	return path
 }
 
-// isolateAppDir points discovery's user-config-dir at an empty temp dir so the
-// appdir fallback never picks up the developer's real ~/.config or %AppData%
-// config.json during tests. It returns the temp dir so callers can plant a
-// config under <dir>/google-health-cli/ to exercise appdir discovery.
-func isolateAppDir(t *testing.T) string {
+// isolateAppDir points discovery's user-config and user-cache dirs at two
+// distinct empty temp dirs, so tests never pick up the developer's real
+// ~/.config, ~/.cache, %AppData%, or %LocalAppData% — and so a test can tell the
+// config base (config.json discovery) apart from the cache base (token default).
+// Returns (configDir, cacheDir).
+func isolateAppDir(t *testing.T) (configDir, cacheDir string) {
 	t.Helper()
-	dir := t.TempDir()
-	prev := userConfigDir
-	userConfigDir = func() (string, error) { return dir, nil }
-	t.Cleanup(func() { userConfigDir = prev })
-	return dir
+	configDir, cacheDir = t.TempDir(), t.TempDir()
+	prevConfig, prevCache := userConfigDir, userCacheDir
+	userConfigDir = func() (string, error) { return configDir, nil }
+	userCacheDir = func() (string, error) { return cacheDir, nil }
+	t.Cleanup(func() { userConfigDir, userCacheDir = prevConfig, prevCache })
+	return configDir, cacheDir
 }
 
 func TestDefaults(t *testing.T) {
@@ -175,7 +177,7 @@ func TestAppDirConfigDiscovered(t *testing.T) {
 	// No --config, no env, no CWD config: the config.json next to the token
 	// cache (user config dir) must be auto-discovered (issue #6, AC #4).
 	t.Chdir(t.TempDir())
-	appBase := isolateAppDir(t)
+	appBase, _ := isolateAppDir(t) // config.json is discovered under the config base.
 	appDir := filepath.Join(appBase, appDirName)
 	if err := os.MkdirAll(appDir, 0o700); err != nil {
 		t.Fatalf("mkdir appdir: %v", err)
@@ -245,11 +247,14 @@ func TestTokenCacheDefaultNotInWorkingDir(t *testing.T) {
 	// Negative assertion — fails loudly if the per-user default ever regresses.
 	cwd := t.TempDir()
 	t.Chdir(cwd)
-	appBase := isolateAppDir(t) // UserConfigDir -> a temp dir distinct from cwd.
+	_, cacheBase := isolateAppDir(t) // token default lives under the cache base.
 
 	cfg, err := Load(Options{})
 	if err != nil {
 		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.TokenCacheIsDefault {
+		t.Fatal("TokenCacheIsDefault = false, want true with no override")
 	}
 	if !filepath.IsAbs(cfg.TokenCache) {
 		t.Errorf("default token cache %q is not absolute — a relative default lands in the CWD", cfg.TokenCache)
@@ -257,8 +262,44 @@ func TestTokenCacheDefaultNotInWorkingDir(t *testing.T) {
 	if isWithinDir(cfg.TokenCache, cwd) {
 		t.Errorf("default token cache %q resolves inside the working directory %q (credential-leak risk)", cfg.TokenCache, cwd)
 	}
-	if !isWithinDir(cfg.TokenCache, appBase) {
-		t.Errorf("default token cache %q is not under the user config dir %q", cfg.TokenCache, appBase)
+	if !isWithinDir(cfg.TokenCache, cacheBase) {
+		t.Errorf("default token cache %q is not under the user cache dir %q", cfg.TokenCache, cacheBase)
+	}
+}
+
+func TestTokenCacheDefaultIsNotRoaming(t *testing.T) {
+	// Shared CLI convention §1: a token is regenerable state, so its default must
+	// come from the non-roaming cache base (os.UserCacheDir), never the config
+	// base (os.UserConfigDir = %AppData%\Roaming on Windows, which syncs a live
+	// token across machines).
+	t.Chdir(t.TempDir())
+	configBase, cacheBase := isolateAppDir(t)
+
+	cfg, err := Load(Options{})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !isWithinDir(cfg.TokenCache, cacheBase) {
+		t.Errorf("default token cache %q is not under the cache base %q", cfg.TokenCache, cacheBase)
+	}
+	if isWithinDir(cfg.TokenCache, configBase) {
+		t.Errorf("default token cache %q is under the roaming config base %q — it must use the cache base", cfg.TokenCache, configBase)
+	}
+}
+
+func TestTokenCacheEnvOverrideIsNotDefault(t *testing.T) {
+	// An explicit override must not be flagged as the default, so no migration is
+	// attempted into a user-chosen path (CLI conventions §7: default-path-only).
+	t.Chdir(t.TempDir())
+	isolateAppDir(t)
+	t.Setenv(EnvTokenCache, filepath.Join(t.TempDir(), "custom-token.json"))
+
+	cfg, err := Load(Options{})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.TokenCacheIsDefault {
+		t.Error("TokenCacheIsDefault = true for an explicit override, want false")
 	}
 }
 

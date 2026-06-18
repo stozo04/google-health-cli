@@ -22,7 +22,7 @@ metadata:
         - "Google Health API (health.googleapis.com, HTTPS) — read your health & fitness data points (read-only scopes only)"
       files.read:
         - "config.json — OAuth client id/secret and optional settings; discovered via --config, then $GOOGLE_HEALTH_CONFIG, then ./config.json, then next to the executable, then <user config dir>/google-health-cli/config.json"
-        - "token cache — the cached OAuth token (default <user config dir>/google-health-cli/token.json; overridable via GOOGLE_HEALTH_TOKEN_CACHE)"
+        - "token cache — the cached OAuth token (default <user cache dir>/google-health-cli/token.json, a non-roaming location; overridable via GOOGLE_HEALTH_TOKEN_CACHE; a token left at the older <user config dir> path is migrated forward automatically)"
       files.write:
         - "token cache — written at login and re-written when the token auto-refreshes (no other files are written)"
     requires:
@@ -41,7 +41,7 @@ metadata:
         description: "Path to a config.json holding client_id/client_secret (alternative to the env vars)."
         required: false
       - name: GOOGLE_HEALTH_TOKEN_CACHE
-        description: "Override the cached-token path (default <user config dir>/google-health-cli/token.json)."
+        description: "Override the cached-token path (default <user cache dir>/google-health-cli/token.json)."
         required: false
       - name: GOOGLE_HEALTH_BASE_URL
         description: "Override the API base URL (default https://health.googleapis.com)."

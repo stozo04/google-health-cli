@@ -71,6 +71,10 @@ type Config struct {
 	// hint in diagnostics (doctor) and the fail-fast error, so the message can
 	// never drift from the real search order.
 	SearchedPaths []string
+	// TokenCacheIsDefault reports that TokenCache fell through to the built-in
+	// default (no --config/file/env override). Only then is it safe to migrate a
+	// token forward from a previous default location (shared CLI conventions §7).
+	TokenCacheIsDefault bool
 }
 
 // HasOAuthClient reports whether both OAuth client credentials are loaded. A
@@ -127,9 +131,12 @@ func Load(opts Options) (*Config, error) {
 	// 2. Environment overrides (LookupEnv distinguishes set-empty from unset).
 	applyEnv(cfg)
 
-	// 3. Token cache location: env override, else <UserConfigDir>/app/token.json.
+	// 3. Token cache location: flag/file/env override, else the non-roaming
+	// per-user default (<UserCacheDir>/app/token.json). When the default is used,
+	// flag it so the caller may migrate a token forward from the old location.
 	if cfg.TokenCache == "" {
 		cfg.TokenCache = defaultTokenCachePath()
+		cfg.TokenCacheIsDefault = true
 	}
 
 	return cfg, nil
@@ -223,17 +230,34 @@ func applyEnv(cfg *Config) {
 	}
 }
 
-// userConfigDir is os.UserConfigDir, indirected so tests can point discovery at
-// a temp dir instead of the developer's real ~/.config or %AppData%.
-var userConfigDir = os.UserConfigDir
+// userConfigDir and userCacheDir wrap the os equivalents, indirected so tests can
+// point discovery at temp dirs instead of the developer's real ~/.config,
+// ~/.cache, %AppData%, or %LocalAppData%.
+var (
+	userConfigDir = os.UserConfigDir
+	userCacheDir  = os.UserCacheDir
+)
 
-// defaultTokenCachePath is <UserConfigDir>/google-health-cli/token.json, falling
-// back to ./token.json if the user config dir can't be determined.
+// defaultTokenCachePath is <UserCacheDir>/google-health-cli/token.json. The token
+// is regenerable state, not config, so it lives under the non-roaming cache base
+// (Windows %LocalAppData%) rather than UserConfigDir (%AppData%\Roaming, which
+// syncs a live credential across machines). Falls back to ./token.json only if
+// the cache dir can't be determined. See .claude/CLI_CONVENTIONS.md §1.
 func defaultTokenCachePath() string {
-	if dir, err := userConfigDir(); err == nil {
+	if dir, err := userCacheDir(); err == nil {
 		return filepath.Join(dir, appDirName, defaultTokenName)
 	}
 	return defaultTokenName
+}
+
+// LegacyTokenCachePath is the pre-relocation default (<UserConfigDir>/
+// google-health-cli/token.json). It is exposed only so the CLI can migrate an
+// existing token forward to defaultTokenCachePath; "" if it can't be determined.
+func LegacyTokenCachePath() string {
+	if dir, err := userConfigDir(); err == nil {
+		return filepath.Join(dir, appDirName, defaultTokenName)
+	}
+	return ""
 }
 
 // appConfigPath is <UserConfigDir>/google-health-cli/config.json — the config

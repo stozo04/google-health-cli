@@ -73,6 +73,36 @@ func SaveToken(path string, tok *oauth2.Token) error {
 	return nil
 }
 
+// MigrateLegacyToken relocates a token from a previous default location to the
+// current one, exactly once and conservatively (shared CLI conventions §7):
+//   - no-op if either path is empty or they are identical;
+//   - never clobbers a token already at newPath;
+//   - no-op on a missing/corrupt/unreadable legacy file (nothing live to move);
+//   - removes the legacy file only after the new copy is safely written.
+//
+// It is best-effort by intent: a failure just means the next login writes fresh,
+// so callers should log and continue rather than abort.
+func MigrateLegacyToken(newPath, legacyPath string) (migrated bool, err error) {
+	if newPath == "" || legacyPath == "" || newPath == legacyPath {
+		return false, nil
+	}
+	if _, err := os.Stat(newPath); err == nil {
+		return false, nil // never overwrite a token already at the destination.
+	}
+	tok, lerr := LoadToken(legacyPath)
+	if lerr != nil || tok == nil {
+		return false, nil // missing/corrupt/unreadable legacy → nothing to relocate.
+	}
+	if err := SaveToken(newPath, tok); err != nil {
+		return false, err
+	}
+	if err := os.Remove(legacyPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		// The token is safely at newPath; only cleanup of the old copy failed.
+		return true, fmt.Errorf("remove legacy token cache %s: %w", legacyPath, err)
+	}
+	return true, nil
+}
+
 // DeleteToken removes the token cache (used by `auth logout`). A missing file is
 // not an error.
 func DeleteToken(path string) error {

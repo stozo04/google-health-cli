@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -92,6 +93,64 @@ func TestDeleteToken(t *testing.T) {
 	// Deleting an already-absent file is not an error.
 	if err := DeleteToken(path); err != nil {
 		t.Errorf("DeleteToken(missing) = %v, want nil", err)
+	}
+}
+
+func TestMigrateLegacyToken(t *testing.T) {
+	dir := t.TempDir()
+	legacy := filepath.Join(dir, "roaming", "token.json")
+	newPath := filepath.Join(dir, "local", "token.json")
+	if err := SaveToken(legacy, &oauth2.Token{AccessToken: "a", RefreshToken: "r", TokenType: "Bearer"}); err != nil {
+		t.Fatal(err)
+	}
+
+	moved, err := MigrateLegacyToken(newPath, legacy)
+	if err != nil || !moved {
+		t.Fatalf("MigrateLegacyToken: moved=%v err=%v, want true/nil", moved, err)
+	}
+	if _, serr := os.Stat(legacy); !errors.Is(serr, os.ErrNotExist) {
+		t.Error("legacy token still present after migration")
+	}
+	got, err := LoadToken(newPath)
+	if err != nil || got == nil || got.AccessToken != "a" {
+		t.Fatalf("relocated token missing/wrong: %+v err=%v", got, err)
+	}
+
+	// Idempotent: a second run is a no-op (legacy is gone).
+	if moved2, _ := MigrateLegacyToken(newPath, legacy); moved2 {
+		t.Error("second migration reported a move, want no-op")
+	}
+}
+
+func TestMigrateLegacyTokenNeverClobbers(t *testing.T) {
+	dir := t.TempDir()
+	legacy := filepath.Join(dir, "roaming", "token.json")
+	newPath := filepath.Join(dir, "local", "token.json")
+	if err := SaveToken(legacy, &oauth2.Token{AccessToken: "old"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveToken(newPath, &oauth2.Token{AccessToken: "current"}); err != nil {
+		t.Fatal(err)
+	}
+
+	moved, err := MigrateLegacyToken(newPath, legacy)
+	if err != nil || moved {
+		t.Fatalf("MigrateLegacyToken: moved=%v err=%v, want false/nil (destination occupied)", moved, err)
+	}
+	got, _ := LoadToken(newPath)
+	if got == nil || got.AccessToken != "current" {
+		t.Errorf("destination token was clobbered: %+v", got)
+	}
+	if _, serr := os.Stat(legacy); errors.Is(serr, os.ErrNotExist) {
+		t.Error("legacy token was removed despite no migration")
+	}
+}
+
+func TestMigrateLegacyTokenNoLegacy(t *testing.T) {
+	dir := t.TempDir()
+	moved, err := MigrateLegacyToken(filepath.Join(dir, "new.json"), filepath.Join(dir, "absent.json"))
+	if err != nil || moved {
+		t.Fatalf("MigrateLegacyToken(no legacy): moved=%v err=%v, want false/nil", moved, err)
 	}
 }
 
