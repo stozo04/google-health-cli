@@ -64,7 +64,10 @@ func SaveToken(path string, tok *oauth2.Token) error {
 
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
-	if err := enc.Encode(tok); err != nil {
+	// G117: persisting the OAuth token (which holds the access/refresh secrets) to
+	// disk is the entire purpose of the token cache; it is written owner-only
+	// (0600) above, so marshaling its secret fields here is by design.
+	if err := enc.Encode(tok); err != nil { //nolint:gosec // G117: token cache must marshal the secret token (0600).
 		return fmt.Errorf("write token cache %s: %w", path, err)
 	}
 	return nil
