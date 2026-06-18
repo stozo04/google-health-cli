@@ -15,6 +15,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/stozo04/google-health-cli/internal/auth"
+	"github.com/stozo04/google-health-cli/internal/config"
 )
 
 // fixtureServer serves the committed exercise fixture for any request.
@@ -337,5 +338,57 @@ func TestAuthLogout(t *testing.T) {
 	_ = json.Unmarshal([]byte(stdout), &report)
 	if report.Present {
 		t.Error("token still present after logout")
+	}
+}
+
+func TestEndToEndMigratesLegacyTokenToCacheDir(t *testing.T) {
+	// CLI conventions §1+§7, end-to-end: a token at the legacy <UserConfigDir>
+	// default is relocated to the <UserCacheDir> default through the real command
+	// tree (resolveConfig), with the session preserved. Hermetic across OSes —
+	// every base dir Go consults is overridden so the real user dirs are untouched.
+	t.Chdir(t.TempDir())
+	configBase, cacheBase, home := t.TempDir(), t.TempDir(), t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configBase) // Linux config base
+	t.Setenv("XDG_CACHE_HOME", cacheBase)   // Linux cache base
+	t.Setenv("AppData", configBase)         // Windows %AppData% (config base)
+	t.Setenv("LocalAppData", cacheBase)     // Windows %LocalAppData% (cache base)
+	t.Setenv("HOME", home)                  // macOS ~/Library/* base
+	// Neutralize inherited overrides so the defaults are used (migration only runs
+	// for the default path).
+	t.Setenv(config.EnvConfig, "")
+	t.Setenv(config.EnvTokenCache, "")
+
+	legacy := config.LegacyTokenCachePath()
+	if legacy == "" {
+		t.Skip("no user config dir resolvable on this platform")
+	}
+	cfg, err := config.Load(config.Options{})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	newPath := cfg.TokenCache
+	if newPath == legacy {
+		t.Fatalf("new (%s) and legacy token paths coincide — cannot prove relocation", newPath)
+	}
+
+	tok := &oauth2.Token{AccessToken: "live", RefreshToken: "r", TokenType: "Bearer", Expiry: time.Now().Add(24 * time.Hour)}
+	if err := auth.SaveToken(legacy, tok); err != nil {
+		t.Fatal(err)
+	}
+
+	// Any command through the tree triggers resolveConfig, which performs the move.
+	if _, _, rerr := run(t, "config", "path"); rerr != nil {
+		t.Fatalf("config path: %v", rerr)
+	}
+
+	if got, _ := auth.LoadToken(legacy); got != nil {
+		t.Errorf("legacy token still present at %s after migration", legacy)
+	}
+	moved, err := auth.LoadToken(newPath)
+	if err != nil || moved == nil {
+		t.Fatalf("token not found at new cache path %s: %v", newPath, err)
+	}
+	if moved.AccessToken != "live" {
+		t.Errorf("relocated token AccessToken = %q, want live (session not preserved)", moved.AccessToken)
 	}
 }
