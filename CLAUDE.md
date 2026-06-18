@@ -84,7 +84,9 @@ Run `make check` before committing.
 Releases are **tag-driven**: `git tag vX.Y.Z && git push origin vX.Y.Z` (or Actions → Release →
 Run workflow) triggers GoReleaser (`.goreleaser.yaml`), which cross-compiles, builds archives +
 checksums, and publishes a GitHub Release. Version metadata is injected from the tag via ldflags —
-there is **no version constant to bump**. The ClawHub publish workflow republishes the skill on release.
+there is **no version constant to bump**. The ClawHub publish workflow (`publish-clawhub.yml`) is
+**independent of releases** — it republishes the skill whenever `SKILL.md` changes on `main` (or via
+manual `workflow_dispatch`), so a `SKILL.md` fix reaches ClawHub on merge, not on tag.
 
 - **Versioning: SemVer.** A backward-compatible change (e.g. the auto-migrated token-cache default in
   v1.3.0) is a **minor**; breaking the documented JSON shapes / exit codes (`AGENTS.md`) is a **major**.
