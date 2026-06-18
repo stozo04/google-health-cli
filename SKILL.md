@@ -58,6 +58,15 @@ parse whatever you care about. Single static binary — **no Python or other run
 > ⚠️ **Read-only.** It requests only read-only Google Health scopes and never writes your
 > health data.
 
+> 🔒 **Privacy — sensitive health data leaves on stdout.** Every `data list`, `rollup daily`,
+> `sessions`, and `api get` prints your **personal health information** (heart rate, sleep, weight,
+> exercise, blood oxygen, profile, …) to **stdout** as JSON. In an agent or pipeline, stdout may be
+> **logged, summarized, persisted, or transmitted** to other tools, model providers, or third
+> parties. Treat this output as sensitive PII: only run it in contexts you trust to handle health
+> data, and do not persist or forward it unless you intend to. The tool never sends your data
+> anywhere itself (it only talks to Google's API over HTTPS) — what happens to stdout is the
+> caller's responsibility.
+
 ## Setup (one time)
 
 Unlike a simple email/password tool, Google Health uses OAuth, so first-time setup needs a
@@ -187,6 +196,14 @@ google-health-cli sessions --raw               # raw exercise data points
 google-health-cli api get /v4/users/me/profile     # GET any read-only v4 path
 google-health-cli api get /v4/users/me/settings
 ```
+
+> ⚠️ **Sensitive endpoints — broader than the typed metrics.** `api get` can read **any**
+> read-only v4 path, including `users/me/profile` and `users/me/settings` — account, identity, and
+> settings data that the typed commands don't surface. Its responses are personal data printed to
+> stdout, so the same **Privacy** caution above applies, and the broad reach makes
+> over-collection easy. It stays **GET-only** (no path can write or delete), but prefer the typed
+> `data`/`rollup`/`sessions` commands and reach for `api get` only when you need an endpoint they
+> don't model.
 
 ## Full command reference
 
