@@ -10,6 +10,14 @@ them before changing any skill metadata, scopes, `permissions`, docs, or the dat
 
 @.claude/CLAWHUB_STANDARDS.md
 
+**Required reading — shared CLI conventions (tracked, mirrored with `speediance-cli`):** the
+cross-repo invariants for the config/auth/credential layer (per-user state dir, one app-dir
+constant, `0600` secrets, self-describing discovery, fail-fast errors, advertised==actual) live in
+`.claude/CLI_CONVENTIONS.md` and are imported below. That file is kept **byte-identical** with the
+sibling `speediance-cli` repo — propose changes through the shared agent process before editing it.
+
+@.claude/CLI_CONVENTIONS.md
+
 ## What this is (the "why")
 
 `google-health-cli` is a **generic, read-only Google Health data extractor**. It owns OAuth2 login and the
