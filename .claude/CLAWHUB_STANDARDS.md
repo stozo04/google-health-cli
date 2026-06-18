@@ -25,6 +25,71 @@ gap, and to back every promise with a guard that fails the build.
   - *MCP Tool Poisoning*: hidden instructions in descriptions, invisible/deceptive Unicode,
     prompt injection smuggled into parameter descriptions or examples.
 
+### Full scan taxonomy (what a ClawHub review checks)
+
+ClawHub runs a broad battery of detectors. Below is the full category set as of this writing,
+each with **this repo's posture** — most map to a rule below; a few are inherently **N/A** for a
+read-only, self-contained Go CLI, and where there is no dedicated guard yet it says **posture
+only**. Keep this list current as the tool grows, and convert a "posture only" line into a real
+guard the moment a change makes that category exploitable.
+
+- **Prompt Injection** (instruction override, hidden instructions, exfiltration commands) —
+  `SKILL.md`, the catalog, flag help, and examples *describe*; they never instruct an agent to
+  act. → rule 4.
+- **Data Exfiltration** (external transmission, env-var harvesting, filesystem enumeration) —
+  egress is only the declared Google hosts; env reads are the specific `GOOGLE_HEALTH_*` keys via
+  `os.LookupEnv` (never an `os.Environ()` sweep); no filesystem walking beyond the declared
+  config/token paths. → rules 2, 5.
+- **Privilege Escalation** (excessive permissions, sudo/root execution, credential access) — six
+  read-only scopes (least privilege); never elevates or runs as root; touches only its own `0600`
+  token cache. → rules 1–2; CLI_CONVENTIONS §3.
+- **Supply Chain** (unpinned dependencies, external script fetching, obfuscated code) — Go modules
+  pin every dependency by version **and** checksum (`go.sum`); nothing fetches remote scripts/code
+  at build or run; no obfuscated/minified code. *Posture (spot-check with `go mod verify`); keep
+  `go.sum` honest and never add `curl | sh`-style tooling.*
+- **Excessive Agency** (unrestricted tool access, autonomous decision-making, scope creep) — the
+  CLI is a *dumb data collector*: read-only, makes no decisions, does no filtering/merging/
+  interpretation (the consumer owns that). Catalog scope creep is blocked by the read-only
+  allowlist. → rule 1 + the architecture invariant.
+- **Output Handling** (unvalidated output injection, cross-context output, unbounded output) —
+  stdout is the API's raw JSON bytes, verbatim; the **Privacy** callouts warn that this output
+  crosses into agent/log/pipeline contexts; counts/hints go to stderr. Callers must treat stdout
+  as untrusted data. → rule 3.
+- **System Prompt Leakage** (direct, indirect, tool-based) — **N/A**: a CLI binary carries no
+  system prompt, and `SKILL.md` hides no instructions to leak.
+- **Memory Poisoning** (persistent context injection, context-window stuffing, memory
+  manipulation) — **N/A** for the binary (it holds no memory/agent state); the live concern is
+  that its *output and descriptions* carry no injection that could poison a consuming agent's
+  context. → rules 3–4.
+- **Tool Misuse** (parameter abuse, chaining abuse, unsafe defaults) — defaults are safe:
+  `api get` is GET-only (no path can write/delete), window flags default to a bounded range,
+  secrets default to `0600`. → rule 1; CLI_CONVENTIONS §3.
+- **Rogue Agent** (self-modification, session persistence) — the binary never rewrites itself or
+  installs background persistence; the only persisted state is the declared token cache. → rule 2;
+  CLI_CONVENTIONS §1–2.
+- **Trigger Abuse** (overly broad trigger, shadow command, keyword baiting) — the `SKILL.md`
+  `name`/`description` describe exactly what the tool does (read Google Health data); no
+  keyword-baiting to fire on unrelated prompts, no shadow/undocumented commands. → governing
+  principle + rule 4.
+- **Behavioral AST** (`exec()`, `eval()`, dynamic import) — no `eval`, no `plugin.Open`/dynamic
+  import, no `unsafe`. The **only** process spawn is `auth.OpenBrowser` for the one-time
+  interactive login: a hardcoded per-OS launcher (`rundll32`/`open`/`xdg-open`) with the URL as a
+  separate argv element and **no shell** (annotated as a G204 false positive). Don't add other
+  process execution. *Posture (no dedicated guard); add one if the process-spawning surface
+  grows.*
+- **Taint Tracking** (direct / variable-mediated taint flow, credential exfiltration chain) — the
+  OAuth token flows only into the `Authorization` header of requests to the declared Google host;
+  it is never written to stdout, logs, or any other sink. Keep credentials off every output path.
+  → rules 3, 5.
+- **YARA Signatures** (malware, webshell, cryptominer) — **N/A**: introduce nothing that matches;
+  the repo ships a single self-contained client.
+- **MCP Least Privilege** (underdeclared capability, wildcard permission, missing permission
+  declaration) — the `metadata.openclaw.permissions` block lists the exact network hosts and the
+  exact files read/written — no wildcards, nothing omitted. → rule 2.
+- **MCP Tool Poisoning** (hidden instructions, Unicode deception, parameter-description injection)
+  — no hidden instructions, no invisible/look-alike Unicode, no injection text in any description
+  or example. → rule 4.
+
 ## The rules
 
 1. **Advertised capability == actual capability.** Never declare an operation, scope, endpoint,
