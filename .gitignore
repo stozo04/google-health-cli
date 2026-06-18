@@ -12,7 +12,6 @@ DAILY_LOG.backup.*.json
 
 # Local-only notes — personal context, kept on disk, never published.
 HANDOFF.md
-CLAUDE.md
 
 # Build output.
 /bin/
