@@ -1,9 +1,11 @@
 # Shared CLI Conventions — google-health-cli & speediance-cli
 
-**Locked 2026-06-18** (converged between the GH and SPD agents). This file is
-committed **byte-identical** to both repos and `@import`-ed from each `CLAUDE.md`,
-the same way `.claude/CLAWHUB_STANDARDS.md` already is. Propose changes through the
-shared agent process so both copies stay in sync.
+**Locked 2026-06-18 (rev 2).** Re-locked after an external best-practice review
+moved the **token** base from `os.UserConfigDir` to the non-roaming
+`os.UserCacheDir` (see §1). Committed **byte-identical** to both repos and
+`@import`-ed from each `CLAUDE.md`, the same way `.claude/CLAWHUB_STANDARDS.md`
+already is. Propose changes through the shared agent process so both copies stay
+in sync.
 
 These are two self-contained, read-only, agent-first CLIs (one Go binary, no
 runtime deps) that share a config/auth/credential layer. This file captures the
@@ -42,33 +44,44 @@ in the table** and tracked toward a test.
 |---|---|---|
 | guards | `TestCatalogIsReadOnly` (no mutating op in catalog), `TestSkillDocWarnsAboutSensitiveOutput` | `TestTokenCacheConfigKeyHonored` (advertised `token_cache_path` now actually wired — a literal advertised==actual test), `TestDotEnvDoesNotInjectForeignEnv`; SKILL-perms==code via ClawHub publish scan + manual pre-publish checklist (automated test = SPD adoption-PR TODO) |
 
-## 1. Per-user state dir — never a CWD secret
+## 1. Per-user state dir — never a CWD secret; non-roaming base for tokens
 
-Secrets (token cache, any written credential) live under
-`os.UserConfigDir()/<app-dir>/`, **never** a CWD-relative path. A CLI's working
-directory is attacker-/agent-influenceable and frequently a *different* repo, so a
-CWD secret leaks (and gets committed). Fall back to a relative path only as an
-absolute last resort (UserConfigDir unavailable).
+Secrets and state live under a per-user OS dir, **never** a CWD-relative path (a
+CLI's working directory is attacker-/agent-influenceable and frequently a
+*different* repo, so a CWD secret leaks and gets committed). Beyond "not CWD,"
+pick the **purpose-appropriate, non-roaming base** per artifact:
 
-**Guard:** a negative test asserting the default secret path does **not** resolve
-inside the CWD.
+- **token / regenerable state → `os.UserCacheDir()`** (Windows `%LocalAppData%`,
+  which — unlike `%AppData%\Roaming` from `os.UserConfigDir()` — does **not** sync
+  a live credential across machines; a token is regenerable state, not config, so
+  this is also XDG-aligned). Go exposes no `os.UserStateDir()`; the cache base is
+  the closest non-roaming home, and a wiped cache just forces a harmless re-login.
+- **config → `os.UserConfigDir()`.**
 
-| | GH | SPD |
-|---|---|---|
-| token file | `<UserConfigDir>/google-health-cli/token.json` | `<UserConfigDir>/speediance/token.json` |
-| guard | `TestTokenCacheDefaultNotInWorkingDir` *(to add in adoption PR)* | `TestTokenCacheDefaultNotInWorkingDir` |
+Fall back to a relative path only as an absolute last resort (the base dir can't
+be determined).
 
-## 2. One app-dir constant, for both token and config
-
-A **single** constant names the per-user app dir, used by *both* the token-cache
-default and the config-discovery fallback (so state isn't split across two
-folders). **Value = the repo's already-established app-dir** — the binary name for
-a greenfield repo; the dir that already shipped if one exists. (This is decision
-D2 — "don't rename existing things for cosmetic parity" — applied to a directory.)
+**Guard:** negative tests that the default token path (a) does **not** resolve
+inside the CWD and (b) is under the cache base, **not** the roaming config base.
 
 | | GH | SPD |
 |---|---|---|
-| value | `google-health-cli` (= binary, greenfield) | `speediance` (pre-existing `<UserConfigDir>/speediance/config.json` fallback) |
+| token file | `<UserConfigDir>/google-health-cli/token.json` → **migrating to `<UserCacheDir>/google-health-cli/token.json`** (shipped default; relocation PR pending) | `<UserCacheDir>/speediance/token.json` (retargeting pre-merge #21) |
+| guard | `TestTokenCacheDefaultNotInWorkingDir` (PR #10); `TestTokenCacheDefaultIsNotRoaming` ships with the relocation | `TestTokenCacheDefaultNotInWorkingDir`, `TestTokenCacheDefaultIsNotRoaming` |
+
+## 2. One app-dir name, placed in the purpose-appropriate base
+
+A **single** app-dir name is shared by both the token and config locations — but
+each sits under its **purpose-appropriate base** (token under the cache base per
+§1, config under the config base), so they are deliberately *not* forced into one
+folder. **Value = the repo's already-established app-dir name** — the binary name
+for a greenfield repo; the name that already shipped if one exists. (This is
+decision D2 — "don't rename existing things for cosmetic parity" — applied to a
+directory name.)
+
+| | GH | SPD |
+|---|---|---|
+| app-dir name | `google-health-cli` (= binary) | `speediance` (pre-existing `<UserConfigDir>/speediance/config.json` fallback) |
 
 ## 3. Secret file permissions
 
@@ -127,7 +140,7 @@ So no user is forced to re-auth, and the credential actually leaves the old spot
 
 | | GH | SPD |
 |---|---|---|
-| status | N/A — token has always been per-user; no default has moved | `auth.MigrateLegacy` (`.token.json` → per-user), `TestMigrateLegacyMovesToken` |
+| status | **migration planned** — relocate the shipped `<UserConfigDir>` token → `<UserCacheDir>` (per §1's rev-2 move) using this pattern; PR pending | `auth.MigrateLegacy` (`.token.json` → per-user), `TestMigrateLegacyMovesToken` |
 
 ## 8. Portable paths in tracked docs
 
