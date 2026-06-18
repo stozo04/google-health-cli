@@ -1,0 +1,86 @@
+# CLAUDE.md
+
+Guidance for Claude Code when working in this repository. The public overview is in [README.md](README.md);
+the machine contract (JSON shapes, exit codes) is in [AGENTS.md](AGENTS.md). This file captures the
+project-specific context those docs leave out.
+
+**Required reading — ClawHub publishing standards (tracked, shared):** the rules for passing
+ClawHub inspection live in `.claude/CLAWHUB_STANDARDS.md` and are imported below. Read and follow
+them before changing any skill metadata, scopes, `permissions`, docs, or the data-type catalog.
+
+@.claude/CLAWHUB_STANDARDS.md
+
+## What this is (the "why")
+
+`google-health-cli` is a **generic, read-only Google Health data extractor**. It owns OAuth2 login and the
+Google Health **v4** REST wire, and emits health data as JSON. It is **self-contained** — no Python, no
+external helper binary.
+
+It is a **dumb data collector**: it returns the API's data points verbatim and does **no** filtering,
+merging, labeling, or interpretation. Every consuming agent gets all the data and derives whatever it cares
+about. In particular, **personal-workout-ai** (Steven's workout agent) is the consumer that owns all the
+personal logic — keeping elliptical sessions, computing Zone-2 bands, merging, and storing into its own
+`DAILY_LOG.json`. None of that lives here. (This tool used to do that sync itself; that was the wrong
+ownership and was removed.)
+
+`ghealth` (formerly at `C:\Users\gates\Personal\ghealth\ghealth.exe`) was a **reference only** — a prior Go
+CLI for the same API, used to learn the data-type catalog and filter syntax. It had **zero runtime
+dependency** and was **deleted on 2026-06-17** (binary + its `%AppData%\ghealth` config/token store).
+
+## Invariants — don't break these
+
+- **Read-only — and the *metadata* must say so too.** The tool requests only the six read-only
+  `googlehealth.*.readonly` scopes and never mutates. `data`/`api` expose no write operations. This extends
+  to all *advertised capability*: the embedded catalog (`internal/api/datatypes.json`) may list **only**
+  read-only operations (the `readOnlyOps` allowlist: `list`, `get`, `reconcile`, `rollup`, `dailyRollUp`).
+  Never add `create`/`update`/`patch`/`delete`/`batchDelete` or any other mutating op, even if the upstream
+  API defines it — `init()` in `datatypes.go` **panics at startup** on any op outside the allowlist, and
+  `TestCatalogIsReadOnly` guards it.
+- **Description must match behavior; warn about sensitive output.** Keep metadata, scopes, the
+  `metadata.openclaw.permissions` block, and docs truthful and consistent with what the binary does, and
+  keep the `SKILL.md` Privacy + `api get` warnings (guarded by `TestSkillDocWarnsAboutSensitiveOutput`).
+  This is the short form of the ClawHub rules in `.claude/CLAWHUB_STANDARDS.md` (imported above) — follow
+  that file for the full standard.
+- **stdout is data; stderr is hints/logs/errors.** `data list` always prints a JSON array of raw points;
+  counts and warnings go to stderr.
+- **Raw fidelity.** `data list` emits each data point's bytes unchanged (`DataPoint.Raw`). Don't reshape.
+- **Per-type filter formats are live-verified** (the API rejects the wrong one with
+  `INVALID_DATA_POINT_FILTER_*`). They live in `internal/api/datatypes.go:formatTimeBound`:
+  - `…civil_*` → civil wall-clock, **no** trailing `Z`
+  - `…sample_time.physical_time` → RFC3339 instant (UTC `Z`)
+  - `…date` → date-only `YYYY-MM-DD`
+- **Catalog `defaultTimePath` is the *filterable* member**, which is not always the documented default —
+  e.g. `sleep` filters on `interval.civil_end_time`, not `civil_start_time`. The embedded
+  `internal/api/datatypes.json` records the working values.
+
+## Dev commands
+
+| Command | What it does |
+|---|---|
+| `make build` | Build the binary into `./bin` |
+| `make test` / `make test-race` | Run tests (with the race detector) |
+| `make lint` / `make fmt` / `make vet` | golangci-lint / gofumpt+goimports / go vet |
+| `make check` | Full pre-commit gauntlet: `tidy fmt vet lint test-race` |
+
+Go is not on PATH on this machine. Prepend both:
+`$env:Path = "C:\Users\gates\go-sdk\go\bin;C:\Users\gates\go\bin;$env:Path"`.
+
+**Goldens:** `make golden` (the old Python oracle) is obsolete — the Python sources are gone. Regenerate the
+Go-produced goldens with `UPDATE_GOLDEN=1 go test ./internal/cli/` (see `assertGolden`).
+
+Run `make check` before committing.
+
+## Layout
+
+- `cmd/google-health-cli/` — entry point.
+- `internal/cli/` — Cobra commands: `doctor`, `types`, `data`, `rollup`, `sessions`, `api`, `auth`,
+  `config`, `version`, `completion`. `rollup daily <type>` returns server-side daily aggregates via the
+  `dataPoints:dailyRollUp` POST (civil-day buckets, reconciled across sources); it is the only way to read
+  the rollup-only types (`active-minutes`, `total-calories`, `floors`, `calories-in-heart-rate-zone`,
+  `time-in-heart-rate-zone`).
+- `internal/api/` — v4 client (generic `ListDataPoints` + `RawGet` + `RollUpDaily`), the embedded 31-type
+  catalog (`datatypes.json` / `datatypes.go`), and filter building.
+- `internal/auth/` — OAuth2 loopback login and the `0600` token cache.
+- `internal/config/` — config discovery and precedence (flags > env > file > defaults).
+- `internal/health/` — exercise data-point parsing, used only by the `sessions` convenience command.
+- `testdata/` — fixtures and golden files that pin the `sessions` output contract.
