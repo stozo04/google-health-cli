@@ -96,7 +96,14 @@ Notes:
 ## Configuration
 
 `config.json` is discovered via `--config` → `$GOOGLE_HEALTH_CONFIG` → `./config.json` → next to the
-executable. Precedence is flags > env > file > defaults.
+executable → `<user config dir>/google-health-cli/config.json` (the sibling of the token cache, so the
+tool works from any directory without `--config` or the env var). Precedence is flags > env > file >
+defaults.
+
+If the cached token has expired and none of those locations yields OAuth `client_id`/`client_secret`, API
+commands fail fast with an actionable error (exit `64`) instead of a cryptic `oauth2 "Could not determine
+client ID"` failure. Run `google-health-cli doctor` to see `configFound` / `clientIdLoaded` and where it
+looked.
 
 | Key | Default | Env override |
 |---|---|---|

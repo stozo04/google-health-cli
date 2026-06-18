@@ -66,6 +66,19 @@ type Config struct {
 	ConfigPath string
 	// ConfigExists reports whether ConfigPath was present on disk at load time.
 	ConfigExists bool
+	// SearchedPaths lists, in priority order, the discovery locations consulted
+	// to find config.json. It is the single source of truth for the "looked at"
+	// hint in diagnostics (doctor) and the fail-fast error, so the message can
+	// never drift from the real search order.
+	SearchedPaths []string
+}
+
+// HasOAuthClient reports whether both OAuth client credentials are loaded. A
+// token refresh needs both; without them an expired token cannot be refreshed
+// and Google's token endpoint returns a cryptic "Could not determine client ID"
+// error. Callers use this to fail fast with an actionable message instead.
+func (c *Config) HasOAuthClient() bool {
+	return c.ClientID != "" && c.ClientSecret != ""
 }
 
 // fileConfig mirrors config.json. Pointer fields distinguish "key present" from
@@ -100,8 +113,9 @@ func Load(opts Options) (*Config, error) {
 	}
 
 	// 1. Locate and read config.json (if any).
-	path := discoverConfigPath(opts.ConfigPath)
+	path, searched := discoverConfigPath(opts.ConfigPath)
 	cfg.ConfigPath = path
+	cfg.SearchedPaths = searched
 
 	fc, exists, err := readFileConfig(path)
 	if err != nil {
@@ -121,28 +135,41 @@ func Load(opts Options) (*Config, error) {
 	return cfg, nil
 }
 
-// discoverConfigPath implements config discovery:
+// discoverConfigPath implements config discovery, returning the chosen path and
+// the ordered list of locations it consulted (for diagnostics and the "no config
+// found" hint):
 //  1. --config flag or GOOGLE_HEALTH_CONFIG env (explicit path; flag wins).
 //  2. config.json in the current working directory.
 //  3. config.json next to the executable, so the tool works from any directory.
-//  4. otherwise keep the CWD path (so `config show`/errors have something sane).
-func discoverConfigPath(flagPath string) string {
+//  4. config.json in the user config dir, next to the token cache, so the tool
+//     works from any directory with neither --config nor the env var set.
+//  5. otherwise keep the CWD path (so `config show`/errors have something sane).
+func discoverConfigPath(flagPath string) (path string, searched []string) {
 	if flagPath != "" {
-		return flagPath
+		return flagPath, []string{"--config " + flagPath}
 	}
+	searched = append(searched, "$"+EnvConfig)
 	if v, ok := os.LookupEnv(EnvConfig); ok && v != "" {
-		return v
+		return v, searched
 	}
+	searched = append(searched, "./"+defaultConfigName+" (current directory)")
 	if _, err := os.Stat(defaultConfigName); err == nil {
-		return defaultConfigName
+		return defaultConfigName, searched
 	}
 	if exe, err := os.Executable(); err == nil {
 		alt := filepath.Join(filepath.Dir(exe), defaultConfigName)
+		searched = append(searched, alt+" (next to the executable)")
 		if _, err := os.Stat(alt); err == nil {
-			return alt
+			return alt, searched
 		}
 	}
-	return defaultConfigName
+	if appCfg := appConfigPath(); appCfg != "" {
+		searched = append(searched, appCfg+" (user config dir)")
+		if _, err := os.Stat(appCfg); err == nil {
+			return appCfg, searched
+		}
+	}
+	return defaultConfigName, searched
 }
 
 func readFileConfig(path string) (fileConfig, bool, error) {
@@ -196,11 +223,24 @@ func applyEnv(cfg *Config) {
 	}
 }
 
+// userConfigDir is os.UserConfigDir, indirected so tests can point discovery at
+// a temp dir instead of the developer's real ~/.config or %AppData%.
+var userConfigDir = os.UserConfigDir
+
 // defaultTokenCachePath is <UserConfigDir>/google-health-cli/token.json, falling
 // back to ./token.json if the user config dir can't be determined.
 func defaultTokenCachePath() string {
-	if dir, err := os.UserConfigDir(); err == nil {
+	if dir, err := userConfigDir(); err == nil {
 		return filepath.Join(dir, appDirName, defaultTokenName)
 	}
 	return defaultTokenName
+}
+
+// appConfigPath is <UserConfigDir>/google-health-cli/config.json — the config
+// sibling of the token cache — or "" if the user config dir can't be determined.
+func appConfigPath() string {
+	if dir, err := userConfigDir(); err == nil {
+		return filepath.Join(dir, appDirName, defaultConfigName)
+	}
+	return ""
 }

@@ -1,23 +1,30 @@
 package cli
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
 
 	"github.com/stozo04/google-health-cli/internal/auth"
+	"github.com/stozo04/google-health-cli/internal/config"
 	"github.com/stozo04/google-health-cli/internal/version"
 )
 
 // doctorReport is the doctor JSON shape (GOAL.md §10). The old Python doctor was
 // a passthrough of `ghealth doctor`; this is our own shape but keeps the
-// tokenValid boolean so existing checks keep working. Key order is frozen.
+// tokenValid boolean so existing checks keep working. Existing keys keep their
+// order and meaning; configFound/clientIdLoaded were added (issue #6) so doctor
+// can diagnose a missing/credential-less config instead of staying silent.
 type doctorReport struct {
-	TokenValid bool     `json:"tokenValid"`
-	BaseURL    string   `json:"baseURL"`
-	User       string   `json:"user"`
-	TokenPath  string   `json:"tokenPath"`
-	ConfigPath string   `json:"configPath"`
-	Scopes     []string `json:"scopes"`
-	Version    string   `json:"version"`
+	TokenValid     bool     `json:"tokenValid"`
+	BaseURL        string   `json:"baseURL"`
+	User           string   `json:"user"`
+	TokenPath      string   `json:"tokenPath"`
+	ConfigPath     string   `json:"configPath"`
+	ConfigFound    bool     `json:"configFound"`
+	ClientIDLoaded bool     `json:"clientIdLoaded"`
+	Scopes         []string `json:"scopes"`
+	Version        string   `json:"version"`
 }
 
 // newDoctorCmd implements `doctor` (GOAL.md §6, §10): print config + token
@@ -49,20 +56,40 @@ func newDoctorCmd(app *App) *cobra.Command {
 			}
 
 			report := doctorReport{
-				TokenValid: tokenValid,
-				BaseURL:    cfg.BaseURL,
-				User:       cfg.User,
-				TokenPath:  cfg.TokenCache,
-				ConfigPath: cfg.ConfigPath,
-				Scopes:     cfg.Scopes,
-				Version:    version.Info().Version,
+				TokenValid:     tokenValid,
+				BaseURL:        cfg.BaseURL,
+				User:           cfg.User,
+				TokenPath:      cfg.TokenCache,
+				ConfigPath:     cfg.ConfigPath,
+				ConfigFound:    cfg.ConfigExists,
+				ClientIDLoaded: cfg.ClientID != "",
+				Scopes:         cfg.Scopes,
+				Version:        version.Info().Version,
 			}
 			if err := writeJSON(cmd.OutOrStdout(), report); err != nil {
 				return err
 			}
 
+			// Diagnose config/credential problems first: a missing or
+			// credential-less config is the root cause of the cryptic
+			// "Could not determine client ID" refresh failure (issue #6), and
+			// it is exactly what users run doctor to find. Report it loudly and
+			// exit non-zero instead of leaving a relative configPath as the only
+			// (silent) tell.
+			stderr := cmd.ErrOrStderr()
+			if !cfg.HasOAuthClient() {
+				if !cfg.ConfigExists {
+					fprintf(stderr, "\nNo config found. Looked at: %s\n", strings.Join(cfg.SearchedPaths, ", "))
+				} else {
+					fprintf(stderr, "\nConfig %s is missing client_id/client_secret.\n", cfg.ConfigPath)
+				}
+				fprintf(stderr, "Set %s or pass --config <path> to a config.json with client_id and client_secret.\n", config.EnvConfig)
+				fprintln(stderr, "Without OAuth client credentials, an expired token cannot be refreshed.")
+				return silentExit(ExitConfig)
+			}
+
 			if !tokenValid {
-				fprintln(cmd.ErrOrStderr(), "\nNot authenticated yet. Run:  google-health-cli auth login")
+				fprintln(stderr, "\nNot authenticated yet. Run:  google-health-cli auth login")
 				return silentExit(ExitAuth)
 			}
 			return nil
