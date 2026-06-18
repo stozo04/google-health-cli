@@ -238,3 +238,32 @@ func TestFlagPathRecordsSingleSearchedPath(t *testing.T) {
 		t.Errorf("SearchedPaths = %v, want a single entry naming %q", cfg.SearchedPaths, missing)
 	}
 }
+
+func TestTokenCacheDefaultNotInWorkingDir(t *testing.T) {
+	// Shared CLI convention §1: the default token cache must never resolve inside
+	// the CWD, or it leaks a credential into whatever repo the tool runs from.
+	// Negative assertion — fails loudly if the per-user default ever regresses.
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	appBase := isolateAppDir(t) // UserConfigDir -> a temp dir distinct from cwd.
+
+	cfg, err := Load(Options{})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !filepath.IsAbs(cfg.TokenCache) {
+		t.Errorf("default token cache %q is not absolute — a relative default lands in the CWD", cfg.TokenCache)
+	}
+	if isWithinDir(cfg.TokenCache, cwd) {
+		t.Errorf("default token cache %q resolves inside the working directory %q (credential-leak risk)", cfg.TokenCache, cwd)
+	}
+	if !isWithinDir(cfg.TokenCache, appBase) {
+		t.Errorf("default token cache %q is not under the user config dir %q", cfg.TokenCache, appBase)
+	}
+}
+
+// isWithinDir reports whether path is located inside dir.
+func isWithinDir(path, dir string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && !strings.HasPrefix(rel, "..")
+}
