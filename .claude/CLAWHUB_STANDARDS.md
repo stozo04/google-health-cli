@@ -44,9 +44,10 @@ guard the moment a change makes that category exploitable.
   read-only scopes (least privilege); never elevates or runs as root; touches only its own `0600`
   token cache. → rules 1–2; CLI_CONVENTIONS §3.
 - **Supply Chain** (unpinned dependencies, external script fetching, obfuscated code) — Go modules
-  pin every dependency by version **and** checksum (`go.sum`); nothing fetches remote scripts/code
-  at build or run; no obfuscated/minified code. *Posture (spot-check with `go mod verify`); keep
-  `go.sum` honest and never add `curl | sh`-style tooling.*
+  pin every dependency by version **and** checksum (`go.sum`, enforced by the toolchain on every
+  CI build); nothing fetches remote scripts/code at build or run; no obfuscated/minified code.
+  → guarded by `TestGoModHasNoReplaceDirectives` (no dependency redirection); never add
+  `curl | sh`-style tooling.
 - **Excessive Agency** (unrestricted tool access, autonomous decision-making, scope creep) — the
   CLI is a *dumb data collector*: read-only, makes no decisions, does no filtering/merging/
   interpretation (the consumer owns that). Catalog scope creep is blocked by the read-only
@@ -74,9 +75,10 @@ guard the moment a change makes that category exploitable.
 - **Behavioral AST** (`exec()`, `eval()`, dynamic import) — no `eval`, no `plugin.Open`/dynamic
   import, no `unsafe`. The **only** process spawn is `auth.OpenBrowser` for the one-time
   interactive login: a hardcoded per-OS launcher (`rundll32`/`open`/`xdg-open`) with the URL as a
-  separate argv element and **no shell** (annotated as a G204 false positive). Don't add other
-  process execution. *Posture (no dedicated guard); add one if the process-spawning surface
-  grows.*
+  separate argv element and **no shell** (annotated as a G204 false positive). → guarded by
+  `TestNoUndeclaredProcessExecutionOrDynamicCode`, which parses the shipped (non-test) source and
+  fails if any file outside the `internal/auth/oauth.go` allowlist imports `os/exec`, `plugin`, or
+  `unsafe`.
 - **Taint Tracking** (direct / variable-mediated taint flow, credential exfiltration chain) — the
   OAuth token flows only into the `Authorization` header of requests to the declared Google host;
   it is never written to stdout, logs, or any other sink. Keep credentials off every output path.
@@ -171,6 +173,15 @@ Concrete guards already in place — keep them, and add to them when you add cap
   resource name or a long opaque numeric record id; the committed fixtures use the `users/me`
   alias and short synthetic ids. **Fix a failure by making the fixture synthetic, never by
   deleting the test.**
+- **No undeclared process execution / dynamic code (Behavioral AST, Excessive Agency).**
+  `TestNoUndeclaredProcessExecutionOrDynamicCode` (`internal/cli/source_guards_test.go`) parses
+  every shipped (non-test) `.go` file and fails if any file outside the `internal/auth/oauth.go`
+  allowlist imports `os/exec`, `plugin`, or `unsafe`. Its matcher is unit-tested
+  (`TestGuardedImportViolationLogic`) and verified to fail when an exec import is reintroduced.
+- **No dependency redirection (Supply Chain).** `TestGoModHasNoReplaceDirectives`
+  (`internal/cli/source_guards_test.go`) fails if `go.mod` carries a `replace` directive; the
+  detector is unit-tested (`TestReplaceDirectiveDetection`). `go.sum` checksums are enforced by the
+  toolchain on every build.
 
 When you add a new command, data type, scope, or permission: walk the checklist, and if the new
 capability needs a new invariant, add its guard *and* record it in this file.
