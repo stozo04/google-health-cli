@@ -1,0 +1,77 @@
+# ClawHub Standards
+
+Standards for any skill in this repo that is published to and inspected by **ClawHub**.
+This file is **tracked in git** (unlike `CLAUDE.md`, which is local-only) so the rules are
+shared across machines, collaborators, and CI. It is loaded into Claude Code via an `@import`
+from `CLAUDE.md` — treat it as **required reading before changing skill metadata, scopes,
+permissions, docs, or the data-type catalog**.
+
+The governing principle: **what the skill *advertises* must equal what it *does*.** ClawHub
+flags the gap between description and behavior; the cheapest way to pass is to never create the
+gap, and to back every promise with a guard that fails the build.
+
+## What ClawHub inspects for
+
+- **Description-Behavior Mismatch** — capability metadata (operation catalogs, OAuth scopes,
+  `permissions` blocks, tool schemas) advertises something the binary doesn't actually do. In an
+  agent setting, that metadata is treated as a capability grant, so a read-only tool that *lists*
+  `create`/`update`/`delete` reads as latent write/exfiltration capability.
+- **Missing User Warnings** — the skill emits sensitive data (PII, health, financial, secrets,
+  tokens) without warning the caller that downstream agents may log, summarize, persist, or
+  transmit it.
+- **Vulnerability Patterns**
+  - *Data Exfiltration*: external transmission to undeclared endpoints, environment-variable
+    harvesting, filesystem enumeration beyond what's documented.
+  - *MCP Tool Poisoning*: hidden instructions in descriptions, invisible/deceptive Unicode,
+    prompt injection smuggled into parameter descriptions or examples.
+
+## The rules
+
+1. **Advertised capability == actual capability.** Never declare an operation, scope, endpoint,
+   or permission the code does not use. If the tool is read-only, its metadata must contain
+   **zero** mutating operations (`create`/`update`/`patch`/`delete`/`batchDelete`/…) — even when
+   the upstream API defines them. Strip them; don't carry them as "documentation."
+2. **Least privilege, declared honestly.** Request only the scopes you use; list only the network
+   hosts you actually call and the files you actually read/write in the `metadata.openclaw`
+   `permissions` block. Keep that block truthful and in sync with behavior.
+3. **Warn about sensitive output.** If any command prints PII/health/secret data to stdout or
+   writes it to disk, user-facing docs must carry a **prominent privacy warning**: the output is
+   sensitive, and downstream agents/pipelines may log, summarize, persist, or transmit it. Call
+   out any unusually broad surface (e.g. a raw "GET any path" escape hatch) separately.
+4. **No hidden or deceptive content.** No instructions embedded in parameter/field descriptions,
+   no invisible or look-alike Unicode, no prompt-injection text in examples or sample data.
+   Descriptions describe; they never instruct the agent to act.
+5. **No undeclared egress or harvesting.** Network calls go only to declared endpoints. Don't
+   read environment variables you don't need, don't enumerate the filesystem, don't phone home.
+6. **Enforce, don't just document.** Every invariant above must be backed by a guard that
+   **fails the build** — an init-time check, a unit test, or a lint rule — not prose alone. A
+   standards doc prevents *writing* the violation; only a guard prevents *shipping* it. When you
+   document a rule here, add (or point to) its guard.
+
+## Pre-publish / pre-merge checklist
+
+- [ ] Metadata lists only operations/scopes/permissions the code actually exercises.
+- [ ] No mutating op appears anywhere a read-only tool's metadata is generated or embedded.
+- [ ] Every sensitive-output command is covered by a privacy warning in the skill docs.
+- [ ] No hidden instructions, deceptive Unicode, or injection text in descriptions/examples.
+- [ ] Network egress and file access match the declared `permissions` block exactly.
+- [ ] Each of the above is enforced by a test or startup guard, not just documented.
+- [ ] `make check` (or the repo's equivalent) is green.
+
+## How **this repo** enforces the rules
+
+Concrete guards already in place — keep them, and add to them when you add capability:
+
+- **Read-only catalog (rules 1–2).** `internal/api/datatypes.json` may advertise only the
+  `readOnlyOps` allowlist (`list`, `get`, `reconcile`, `rollup`, `dailyRollUp`). `init()` in
+  `internal/api/datatypes.go` **panics at startup** on any op outside the allowlist, and
+  `TestCatalogIsReadOnly` (`internal/api/datatypes_test.go`) asserts no mutating op and no
+  unknown op. Verified to fail when a write op is reintroduced.
+- **Sensitive-output warnings (rule 3).** `SKILL.md` carries the Privacy callout (stdout is
+  health PII that may be logged/transmitted/persisted) and the `api get` sensitive-endpoint
+  warning. `TestSkillDocWarnsAboutSensitiveOutput` (`internal/cli/skill_doc_test.go`) fails if
+  either warning is removed or weakened. **Fix by keeping the warning, never by deleting the
+  test.**
+
+When you add a new command, data type, scope, or permission: walk the checklist, and if the new
+capability needs a new invariant, add its guard *and* record it in this file.
