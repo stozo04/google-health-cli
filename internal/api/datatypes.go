@@ -34,7 +34,11 @@ type DataType struct {
 	FilterName string `json:"filterName"`
 	// RecordType is one of Session, Interval, Sample, Daily.
 	RecordType string `json:"recordType"`
-	// Operations the API supports for this type (list, get, reconcile, rollup, …).
+	// Operations are the read-only operations this tool exposes for the type, a
+	// subset of readOnlyOps (list, get, reconcile, rollup, dailyRollUp). The
+	// upstream API also defines mutating operations (create, update, batchDelete)
+	// for some types; those are deliberately omitted because this client is
+	// read-only and never calls them. init enforces that no write op leaks in.
 	Operations []string `json:"operations"`
 	// Scope is the short scope group, e.g. "activity_and_fitness".
 	Scope string `json:"scope"`
@@ -48,12 +52,35 @@ var (
 	dataTypeByEndpoint map[string]DataType
 )
 
+// readOnlyOps is the closed set of operations this read-only client may
+// advertise. Each is a GET-shaped read or a read-only POST aggregation; none
+// mutates Google Health data. The embedded catalog is validated against this set
+// at init, so a write op (create/update/batchDelete/…) can never slip into the
+// metadata and contradict the tool's read-only contract.
+var readOnlyOps = map[string]bool{
+	"list":        true,
+	"get":         true,
+	"reconcile":   true,
+	"rollup":      true,
+	"dailyRollUp": true,
+}
+
 func init() {
 	if err := json.Unmarshal(dataTypesJSON, &dataTypes); err != nil {
 		panic("api: bad embedded datatypes.json: " + err.Error())
 	}
 	dataTypeByEndpoint = make(map[string]DataType, len(dataTypes))
 	for _, dt := range dataTypes {
+		// Guard the read-only invariant: the catalog must never advertise a
+		// mutating operation. This is a hard fail at startup, not a silent one.
+		for _, op := range dt.Operations {
+			if !readOnlyOps[op] {
+				panic(fmt.Sprintf(
+					"api: data type %q advertises non-read-only operation %q; this client is read-only",
+					dt.EndpointName, op,
+				))
+			}
+		}
 		dataTypeByEndpoint[dt.EndpointName] = dt
 	}
 }

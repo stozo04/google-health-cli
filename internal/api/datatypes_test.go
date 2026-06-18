@@ -1,6 +1,45 @@
 package api
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+// TestCatalogIsReadOnly pins the read-only contract: no data type in the
+// embedded catalog may advertise a mutating operation, and every operation it
+// does advertise must be one of the known read-only ops. This is the immutable
+// guard for the "description-behavior mismatch" finding — write ops such as
+// create/update/batchDelete must never reappear in datatypes.json. (The package
+// init also panics on a write op, so a regression fails the whole test binary at
+// load; this test additionally names the offending type and op.)
+func TestCatalogIsReadOnly(t *testing.T) {
+	// Operations that mutate server state. None may appear in the catalog.
+	writeOps := []string{"create", "update", "patch", "replace", "delete", "batchDelete", "batchCreate", "batchUpdate"}
+	isWrite := make(map[string]bool, len(writeOps))
+	for _, op := range writeOps {
+		isWrite[op] = true
+	}
+
+	for _, dt := range DataTypes() {
+		for _, op := range dt.Operations {
+			if isWrite[op] {
+				t.Errorf("%s advertises mutating operation %q; tool is read-only", dt.EndpointName, op)
+			}
+			if !readOnlyOps[op] {
+				t.Errorf("%s advertises unknown operation %q (not in the read-only allowlist %v)",
+					dt.EndpointName, op, sortedKeys(readOnlyOps))
+			}
+		}
+	}
+}
+
+func sortedKeys(m map[string]bool) string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return strings.Join(keys, ",")
+}
 
 func TestDataTypesCatalog(t *testing.T) {
 	all := DataTypes()
