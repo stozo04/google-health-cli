@@ -29,6 +29,14 @@ type doctorReport struct {
 
 // newDoctorCmd implements `doctor` (GOAL.md §6, §10): print config + token
 // validity as indent-2 JSON; exit 2 (with a stderr hint) when not authenticated.
+//
+// Privacy: the JSON reports local environment metadata — token-cache and config
+// paths, the configured account (user), and the base URL. These are intentionally
+// surfaced because diagnosing the user's own setup is the whole point of doctor;
+// they are not redacted. The caller is warned in SKILL.md (guarded by
+// TestSkillDocWarnsAboutSensitiveOutput) that this output is local filesystem
+// layout / account info an agent may log or forward — see
+// .claude/CLAWHUB_STANDARDS.md (warn about sensitive output).
 func newDoctorCmd(app *App) *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",

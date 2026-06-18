@@ -34,7 +34,7 @@
         },
         "updateTime": "2026-06-02T21:35:44.343470Z"
       },
-      "name": "users/1234567890123456789/dataTypes/exercise/dataPoints/817427359969628160"
+      "name": "users/me/dataTypes/exercise/dataPoints/1"
     },
     {
       "dataSource": {
@@ -70,7 +70,7 @@
         },
         "updateTime": "2026-05-24T16:10:40.101788Z"
       },
-      "name": "users/1234567890123456789/dataTypes/exercise/dataPoints/2929444913708591200"
+      "name": "users/me/dataTypes/exercise/dataPoints/2"
     },
     {
       "dataSource": {
@@ -118,7 +118,7 @@
         },
         "updateTime": "2026-06-16T21:09:09.920177Z"
       },
-      "name": "users/1234567890123456789/dataTypes/exercise/dataPoints/299838450205429720"
+      "name": "users/me/dataTypes/exercise/dataPoints/3"
     },
     {
       "dataSource": {
@@ -166,7 +166,7 @@
         },
         "updateTime": "2026-06-15T20:50:33.274710Z"
       },
-      "name": "users/1234567890123456789/dataTypes/exercise/dataPoints/1423894331849694515"
+      "name": "users/me/dataTypes/exercise/dataPoints/4"
     },
     {
       "dataSource": {
@@ -190,7 +190,7 @@
         "metricsSummary": { "activeZoneMinutes": "0", "caloriesKcal": 0 },
         "updateTime": "2026-06-16T19:13:22.558824Z"
       },
-      "name": "users/1234567890123456789/dataTypes/exercise/dataPoints/1346014573146967304"
+      "name": "users/me/dataTypes/exercise/dataPoints/5"
     },
     {
       "dataSource": {
@@ -238,7 +238,7 @@
         },
         "updateTime": "2026-06-02T21:06:17.314208Z"
       },
-      "name": "users/1234567890123456789/dataTypes/exercise/dataPoints/8794835477193874423"
+      "name": "users/me/dataTypes/exercise/dataPoints/6"
     },
     {
       "dataSource": {
@@ -262,7 +262,7 @@
         "metricsSummary": { "activeZoneMinutes": "0", "caloriesKcal": 0 },
         "updateTime": "2026-06-16T19:13:22.589832Z"
       },
-      "name": "users/1234567890123456789/dataTypes/exercise/dataPoints/8047023112774088784"
+      "name": "users/me/dataTypes/exercise/dataPoints/7"
     },
     {
       "dataSource": {
@@ -320,7 +320,7 @@
         },
         "updateTime": "2026-05-19T21:11:27.508314Z"
       },
-      "name": "users/1234567890123456789/dataTypes/exercise/dataPoints/1755836520699610526"
+      "name": "users/me/dataTypes/exercise/dataPoints/8"
     },
     {
       "dataSource": {
@@ -368,7 +368,7 @@
         },
         "updateTime": "2026-05-18T20:52:23.430079Z"
       },
-      "name": "users/1234567890123456789/dataTypes/exercise/dataPoints/4169684535170217891"
+      "name": "users/me/dataTypes/exercise/dataPoints/9"
     }
   ]
 }

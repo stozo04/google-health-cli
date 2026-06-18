@@ -32,9 +32,10 @@ func repoRoot(t *testing.T) string {
 // TestSkillDocWarnsAboutSensitiveOutput is the immutable guard for the "missing
 // user warnings" findings. SKILL.md must carry (1) a prominent privacy warning
 // that the JSON on stdout is sensitive health data that downstream agents may
-// log/transmit/persist, and (2) a warning that the `api get` escape hatch reaches
-// sensitive profile/settings endpoints. If either warning is removed or weakened,
-// this test fails.
+// log/transmit/persist, (2) a warning that the `api get` escape hatch reaches
+// sensitive profile/settings endpoints, and (3) a warning that `doctor` prints
+// local environment metadata (token/config paths, account, base URL) an agent may
+// log or forward. If any warning is removed or weakened, this test fails.
 func TestSkillDocWarnsAboutSensitiveOutput(t *testing.T) {
 	root := repoRoot(t)
 	raw, err := os.ReadFile(filepath.Join(root, "SKILL.md"))
@@ -52,6 +53,8 @@ func TestSkillDocWarnsAboutSensitiveOutput(t *testing.T) {
 		{"flags the output as PII", "PII"},
 		{"warns the api get escape hatch reaches sensitive endpoints", "Sensitive endpoints"},
 		{"calls out the profile/settings reach of api get", "users/me/profile"},
+		{"warns doctor emits local environment metadata", "local environment metadata"},
+		{"names doctor's path/account output", "token-cache and config file paths"},
 	}
 	for _, r := range required {
 		if !strings.Contains(skill, r.marker) {

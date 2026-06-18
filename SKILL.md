@@ -67,6 +67,13 @@ parse whatever you care about. Single static binary — **no Python or other run
 > anywhere itself (it only talks to Google's API over HTTPS) — what happens to stdout is the
 > caller's responsibility.
 
+> 🩺 **`doctor` prints local environment metadata.** The `doctor` JSON includes your
+> **token-cache and config file paths**, the configured **account** (`user`), and the API
+> **base URL** — local filesystem layout and account identifiers rather than health data, but
+> still **local environment metadata** that an agent or pipeline may log, forward, or persist.
+> It exists to diagnose *your own* setup; treat its output like any other local path/account
+> detail and don't paste it into untrusted contexts.
+
 ## Setup (one time)
 
 Unlike a simple email/password tool, Google Health uses OAuth, so first-time setup needs a

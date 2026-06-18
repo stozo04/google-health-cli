@@ -37,7 +37,11 @@ gap, and to back every promise with a guard that fails the build.
 3. **Warn about sensitive output.** If any command prints PII/health/secret data to stdout or
    writes it to disk, user-facing docs must carry a **prominent privacy warning**: the output is
    sensitive, and downstream agents/pipelines may log, summarize, persist, or transmit it. Call
-   out any unusually broad surface (e.g. a raw "GET any path" escape hatch) separately.
+   out any unusually broad surface (e.g. a raw "GET any path" escape hatch) separately. This is
+   **not limited to health/secret payloads**: a diagnostic that emits *local environment
+   metadata* — filesystem paths, the configured account/user, base URLs (e.g. `doctor`) — also
+   leaks filesystem layout and account identifiers an agent may log or forward, so it needs its
+   own warning too. Don't redact metadata a diagnostic exists to surface; warn instead.
 4. **No hidden or deceptive content.** No instructions embedded in parameter/field descriptions,
    no invisible or look-alike Unicode, no prompt-injection text in examples or sample data.
    Descriptions describe; they never instruct the agent to act.
@@ -54,17 +58,33 @@ gap, and to back every promise with a guard that fails the build.
    placeholders (`<path-to-go>`, `$(go env GOPATH)`, `~`), or environment variables instead.
    Leaking a local layout is noise to contributors and a minor info-disclosure smell; treat the
    docs as if a stranger will read them, because once published they will.
-
-## Pre-publish / pre-merge checklist
+8. **Test data must be unmistakably synthetic.** Committed fixtures, golden files, and doc
+   examples must never contain real or real-looking individualized records — no persistent
+   **numeric user ids** (use the `users/me` alias), no long opaque production record ids (use
+   short placeholders), no real account/device identifiers. ClawHub flags real-looking health
+   records + a persistent identifier as a re-identification risk even when the data is fabricated,
+   because once the repo is shared it can't tell. Keep the *shape* realistic for the test; keep
+   the *identity* fake.
+9. **Self-review against this file immediately before opening a PR.** Right before you create or
+   update a PR, **re-read this file and walk the pre-publish checklist against the actual diff** —
+   not from memory, and not "later." Treat it as a required gate: if the diff touches skill
+   metadata, scopes, permissions, docs, the data-type catalog, fixtures, or any command's output,
+   confirm each rule still holds and each new capability ships with its guard in the **same** PR.
+   The cheapest ClawHub finding to fix is the one you catch before the PR exists.
 
 - [ ] Metadata lists only operations/scopes/permissions the code actually exercises.
 - [ ] No mutating op appears anywhere a read-only tool's metadata is generated or embedded.
-- [ ] Every sensitive-output command is covered by a privacy warning in the skill docs.
+- [ ] Every sensitive-output command is covered by a privacy warning in the skill docs —
+      including diagnostics that emit *local environment metadata* (paths, account, base URL).
 - [ ] No hidden instructions, deceptive Unicode, or injection text in descriptions/examples.
 - [ ] Network egress and file access match the declared `permissions` block exactly.
 - [ ] No absolute paths, home dirs, usernames, or machine-local locations in tracked docs/comments/examples.
+- [ ] Fixtures, goldens, and examples are synthetic — no numeric user ids (`users/me`), no
+      long opaque record ids, no real account/device identifiers.
 - [ ] Each of the above is enforced by a test or startup guard, not just documented.
 - [ ] `make check` (or the repo's equivalent) is green.
+- [ ] **Immediately before opening the PR**, re-read this file and walk this checklist against
+      the actual diff (rule 9).
 
 ## How **this repo** enforces the rules
 
@@ -76,10 +96,16 @@ Concrete guards already in place — keep them, and add to them when you add cap
   `TestCatalogIsReadOnly` (`internal/api/datatypes_test.go`) asserts no mutating op and no
   unknown op. Verified to fail when a write op is reintroduced.
 - **Sensitive-output warnings (rule 3).** `SKILL.md` carries the Privacy callout (stdout is
-  health PII that may be logged/transmitted/persisted) and the `api get` sensitive-endpoint
-  warning. `TestSkillDocWarnsAboutSensitiveOutput` (`internal/cli/skill_doc_test.go`) fails if
-  either warning is removed or weakened. **Fix by keeping the warning, never by deleting the
-  test.**
+  health PII that may be logged/transmitted/persisted), the `api get` sensitive-endpoint
+  warning, and the `doctor` local-environment-metadata warning (token/config paths, account,
+  base URL). `TestSkillDocWarnsAboutSensitiveOutput` (`internal/cli/skill_doc_test.go`) fails if
+  any of these warnings is removed or weakened. **Fix by keeping the warning, never by deleting
+  the test.**
+- **Synthetic test data (rule 8).** `TestTestdataHasNoRealisticIdentifiers`
+  (`internal/cli/testdata_privacy_test.go`) walks `testdata/` and fails on a numeric `users/<id>`
+  resource name or a long opaque numeric record id; the committed fixtures use the `users/me`
+  alias and short synthetic ids. **Fix a failure by making the fixture synthetic, never by
+  deleting the test.**
 
 When you add a new command, data type, scope, or permission: walk the checklist, and if the new
 capability needs a new invariant, add its guard *and* record it in this file.
