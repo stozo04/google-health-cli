@@ -10,6 +10,14 @@ them before changing any skill metadata, scopes, `permissions`, docs, or the dat
 
 @.claude/CLAWHUB_STANDARDS.md
 
+**Required reading — shared CLI conventions (tracked, mirrored with `speediance-cli`):** the
+cross-repo invariants for the config/auth/credential layer (per-user state dir, one app-dir
+constant, `0600` secrets, self-describing discovery, fail-fast errors, advertised==actual) live in
+`.claude/CLI_CONVENTIONS.md` and are imported below. That file is kept **byte-identical** with the
+sibling `speediance-cli` repo — propose changes through the shared agent process before editing it.
+
+@.claude/CLI_CONVENTIONS.md
+
 ## What this is (the "why")
 
 `google-health-cli` is a **generic, read-only Google Health data extractor**. It owns OAuth2 login and the
@@ -70,6 +78,24 @@ substituting your own Go install path:
 Go-produced goldens with `UPDATE_GOLDEN=1 go test ./internal/cli/` (see `assertGolden`).
 
 Run `make check` before committing.
+
+## Releasing
+
+Releases are **tag-driven**: `git tag vX.Y.Z && git push origin vX.Y.Z` (or Actions → Release →
+Run workflow) triggers GoReleaser (`.goreleaser.yaml`), which cross-compiles, builds archives +
+checksums, and publishes a GitHub Release. Version metadata is injected from the tag via ldflags —
+there is **no version constant to bump**. The ClawHub publish workflow republishes the skill on release.
+
+- **Versioning: SemVer.** A backward-compatible change (e.g. the auto-migrated token-cache default in
+  v1.3.0) is a **minor**; breaking the documented JSON shapes / exit codes (`AGENTS.md`) is a **major**.
+- **Commit messages: Conventional Commits** (`feat:` / `fix:` / …). GoReleaser auto-groups the release
+  changelog by these prefixes (`changelog.groups`): `feat:` → Features, `fix:` → Bug fixes, everything
+  else → Other changes; `docs:`/`test:`/`chore:` are excluded. **Unprefixed commits still ship but read
+  as "Other changes" — so prefix them, or the auto-notes degrade.** Squash-merge PRs with a `feat:`/`fix:`
+  title so each release line is one clean entry.
+- **Release notes are automatic on tag** — the grouped changelog plus a static install footer
+  (`release.footer`). There is no `CHANGELOG.md` / per-release file to maintain by design; write good
+  `feat:`/`fix:` subjects and the notes follow.
 
 ## Layout
 

@@ -36,7 +36,7 @@ func newAuthLoginCmd(app *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if cfg.ClientID == "" || cfg.ClientSecret == "" {
+			if !cfg.HasOAuthClient() {
 				return withCode(ExitConfig, fmt.Errorf(
 					"missing OAuth client: set client_id and client_secret in %s (or via %s / %s). See OAUTH_SETUP.md",
 					cfg.ConfigPath, "GOOGLE_HEALTH_CLIENT_ID", "GOOGLE_HEALTH_CLIENT_SECRET",

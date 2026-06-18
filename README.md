@@ -96,7 +96,13 @@ Notes:
 ## Configuration
 
 `config.json` is discovered via `--config` → `$GOOGLE_HEALTH_CONFIG` → `./config.json` → next to the
-executable. Precedence is flags > env > file > defaults.
+executable → `<user config dir>/google-health-cli/config.json` (so the tool works from any directory
+without `--config` or the env var). Precedence is flags > env > file > defaults.
+
+If the cached token has expired and none of those locations yields OAuth `client_id`/`client_secret`, API
+commands fail fast with an actionable error (exit `64`) instead of a cryptic `oauth2 "Could not determine
+client ID"` failure. Run `google-health-cli doctor` to see `configFound` / `clientIdLoaded` and where it
+looked.
 
 | Key | Default | Env override |
 |---|---|---|
@@ -104,10 +110,14 @@ executable. Precedence is flags > env > file > defaults.
 | `client_secret` | `""` | `GOOGLE_HEALTH_CLIENT_SECRET` |
 | `base_url` | `https://health.googleapis.com` | `GOOGLE_HEALTH_BASE_URL` |
 | `user` | `users/me` | — |
-| `token_cache` | `<user config dir>/google-health-cli/token.json` | `GOOGLE_HEALTH_TOKEN_CACHE` |
+| `token_cache` | `<user cache dir>/google-health-cli/token.json` (non-roaming) | `GOOGLE_HEALTH_TOKEN_CACHE` |
 | `scopes` | the six read-only Google Health scopes (see below) | — |
 
 `config.json` and the token cache hold credentials — they are written `0600` and must never be committed.
+The token cache lives under the **user cache dir** (`%LocalAppData%` on Windows, `~/.cache` on Linux), not
+the config dir: a token is regenerable state, not config, and the cache dir does not roam across machines.
+A token left at the older `<user config dir>` location is migrated forward automatically on first run, so
+upgrading users keep their session without re-authenticating.
 
 ## Notes
 

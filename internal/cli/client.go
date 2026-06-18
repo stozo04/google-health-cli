@@ -2,7 +2,10 @@ package cli
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
@@ -55,8 +58,36 @@ func (a *App) apiClient(ctx context.Context) (*api.Client, *config.Config, error
 		return nil, nil, notAuthenticated
 	}
 
+	// Fail fast (issue #6): if the cached token needs a refresh but we have no
+	// OAuth client credentials to perform it, the refresh would fail far
+	// downstream with a cryptic oauth2 "Could not determine client ID" error.
+	// Catch it here with an actionable message. A still-valid token needs no
+	// client credentials, so that path is unaffected.
+	if !tok.Valid() && !cfg.HasOAuthClient() {
+		return nil, nil, missingCredentialsError(cfg)
+	}
+
 	client := a.buildAPIClient(ctx, cfg, tok)
 	return client, cfg, nil
+}
+
+// missingCredentialsError builds the actionable, exit-64 error returned when an
+// API command must refresh an expired token but no OAuth client credentials were
+// loaded. It names the discovery order so the caller knows where to put a config
+// or which env var to set, instead of seeing the raw oauth2 endpoint error.
+func missingCredentialsError(cfg *config.Config) error {
+	var cause string
+	if !cfg.ConfigExists {
+		cause = "no config found"
+	} else {
+		cause = fmt.Sprintf("config %s has no client_id/client_secret", cfg.ConfigPath)
+	}
+	msg := fmt.Sprintf(
+		"cannot refresh expired token: %s. Looked at: %s. "+
+			"Set %s or pass --config <path> to a config.json with client_id and client_secret.",
+		cause, strings.Join(cfg.SearchedPaths, ", "), config.EnvConfig,
+	)
+	return withCode(ExitUsage, errors.New(msg))
 }
 
 // buildAuthClient wires the retry transport + OAuth2 token transport for a

@@ -21,8 +21,8 @@ metadata:
         - "Google OAuth2 (accounts.google.com, oauth2.googleapis.com) — one-time interactive login and automatic token refresh"
         - "Google Health API (health.googleapis.com, HTTPS) — read your health & fitness data points (read-only scopes only)"
       files.read:
-        - "config.json — OAuth client id/secret and optional settings, in the working directory"
-        - "token cache — the cached OAuth token (default <user config dir>/google-health-cli/token.json; overridable via GOOGLE_HEALTH_TOKEN_CACHE)"
+        - "config.json — OAuth client id/secret and optional settings; discovered via --config, then $GOOGLE_HEALTH_CONFIG, then ./config.json, then next to the executable, then <user config dir>/google-health-cli/config.json"
+        - "token cache — the cached OAuth token (default <user cache dir>/google-health-cli/token.json, a non-roaming location; overridable via GOOGLE_HEALTH_TOKEN_CACHE; a token left at the older <user config dir> path is migrated forward automatically)"
       files.write:
         - "token cache — written at login and re-written when the token auto-refreshes (no other files are written)"
     requires:
@@ -41,7 +41,7 @@ metadata:
         description: "Path to a config.json holding client_id/client_secret (alternative to the env vars)."
         required: false
       - name: GOOGLE_HEALTH_TOKEN_CACHE
-        description: "Override the cached-token path (default <user config dir>/google-health-cli/token.json)."
+        description: "Override the cached-token path (default <user cache dir>/google-health-cli/token.json)."
         required: false
       - name: GOOGLE_HEALTH_BASE_URL
         description: "Override the API base URL (default https://health.googleapis.com)."
@@ -210,7 +210,7 @@ google-health-cli api get /v4/users/me/settings
 | Command | What it does | `--json` |
 |---|---|---|
 | `auth login \| logout \| status` | OAuth login (one-time browser), token mgmt | `status` |
-| `doctor` | Config + token validity (exit 2 if not authed) | always |
+| `doctor` | Config + token validity; reports `configFound`/`clientIdLoaded` and exits non-zero (78) when no config / no `client_id` is found, else 2 if not authed | always |
 | `types list \| describe <type>` | Inspect the data-type catalog (no network) | ✓ |
 | `data list <type>` | List data points for a type (always JSON) | n/a (always) |
 | `rollup daily <type>` | Server-side daily totals, reconciled per civil day | n/a (always) |
@@ -224,7 +224,9 @@ google-health-cli api get /v4/users/me/settings
 
 - **stdout is parseable**; human hints, counts, and logs go to **stderr**, never interleaved.
 - **Exit codes:** `0` success, `2` auth/API failure (incl. `doctor` when unauthenticated),
-  `64` usage error, `78` config error.
+  `64` usage error (incl. an expired token with no OAuth client credentials to refresh it),
+  `78` config error. An expired token plus an undiscoverable/credential-less config fails fast
+  with an actionable message — not the cryptic `oauth2 "Could not determine client ID"` error.
 - **Read-only:** six read-only `googlehealth.*.readonly` scopes; no write operations exist.
 - **Secrets:** `config.json` and the token cache are gitignored — never commit them.
 - **Time-filter formats** are handled for you per data type (civil wall-clock, RFC3339

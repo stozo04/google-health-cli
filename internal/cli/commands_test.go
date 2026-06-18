@@ -15,6 +15,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/stozo04/google-health-cli/internal/auth"
+	"github.com/stozo04/google-health-cli/internal/config"
 )
 
 // fixtureServer serves the committed exercise fixture for any request.
@@ -170,6 +171,123 @@ func TestDoctorValidToken(t *testing.T) {
 	if !report.TokenValid {
 		t.Error("tokenValid = false, want true for a fresh token")
 	}
+	if !report.ConfigFound {
+		t.Error("configFound = false, want true when --config points at a real file")
+	}
+	if !report.ClientIDLoaded {
+		t.Error("clientIdLoaded = false, want true when the config carries client_id")
+	}
+}
+
+func TestDoctorReportsMissingConfig(t *testing.T) {
+	// --config points at a nonexistent file: doctor must flag configFound:false /
+	// clientIdLoaded:false, warn naming the search order, and exit non-zero —
+	// instead of printing a relative configPath and exiting 0 (issue #6, AC #3).
+	missing := filepath.Join(t.TempDir(), "nope.json")
+	stdout, stderr, err := run(t, "--config", missing, "doctor")
+	var exit *ExitError
+	if !errors.As(err, &exit) || exit.Code != ExitConfig {
+		t.Fatalf("err = %v, want exit %d", err, ExitConfig)
+	}
+	var report doctorReport
+	if jerr := json.Unmarshal([]byte(stdout), &report); jerr != nil {
+		t.Fatalf("doctor JSON: %v\n%s", jerr, stdout)
+	}
+	if report.ConfigFound {
+		t.Error("configFound = true, want false for a nonexistent config")
+	}
+	if report.ClientIDLoaded {
+		t.Error("clientIdLoaded = true, want false with no config")
+	}
+	if !strings.Contains(stderr, "No config found") || !strings.Contains(stderr, "client_id") {
+		t.Errorf("stderr not actionable: %q", stderr)
+	}
+}
+
+func TestDoctorReportsConfigWithoutCredentials(t *testing.T) {
+	// A config that exists but lacks client_id/client_secret: configFound true,
+	// clientIdLoaded false, with a distinct warning and a non-zero exit.
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(cfgPath, []byte(`{"user":"users/me"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, err := run(t, "--config", cfgPath, "doctor")
+	var exit *ExitError
+	if !errors.As(err, &exit) || exit.Code != ExitConfig {
+		t.Fatalf("err = %v, want exit %d", err, ExitConfig)
+	}
+	var report doctorReport
+	if jerr := json.Unmarshal([]byte(stdout), &report); jerr != nil {
+		t.Fatalf("doctor JSON: %v", jerr)
+	}
+	if !report.ConfigFound {
+		t.Error("configFound = false, want true for an existing file")
+	}
+	if report.ClientIDLoaded {
+		t.Error("clientIdLoaded = true, want false without client_id")
+	}
+	if !strings.Contains(stderr, "missing client_id/client_secret") {
+		t.Errorf("stderr missing credential warning: %q", stderr)
+	}
+}
+
+func TestAPICommandFailsFastWithoutCredentials(t *testing.T) {
+	// Expired token + a config without client credentials: an API command must
+	// fail fast with exit 64 and an actionable message naming the discovery
+	// order — NOT the raw oauth2 "Could not determine client ID" string
+	// (issue #6, AC #1).
+	dir := t.TempDir()
+	tokenPath := filepath.Join(dir, "token.json")
+	cfgPath := filepath.Join(dir, "config.json")
+	b, _ := json.Marshal(map[string]any{"token_cache": tokenPath}) // no client_id/secret
+	if err := os.WriteFile(cfgPath, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	expired := &oauth2.Token{
+		AccessToken:  "stale",
+		RefreshToken: "refresh",
+		TokenType:    "Bearer",
+		Expiry:       time.Now().Add(-time.Hour),
+	}
+	if err := auth.SaveToken(tokenPath, expired); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := run(t, "--config", cfgPath, "data", "list", "steps", "--days", "1")
+	var exit *ExitError
+	if !errors.As(err, &exit) || exit.Code != ExitUsage {
+		t.Fatalf("err = %v, want exit %d", err, ExitUsage)
+	}
+	if strings.Contains(err.Error(), "Could not determine client ID") {
+		t.Errorf("leaked raw oauth2 error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "client_id") || !strings.Contains(err.Error(), "Looked at") {
+		t.Errorf("error not actionable: %v", err)
+	}
+}
+
+func TestValidTokenWorksWithoutCredentials(t *testing.T) {
+	// AC #5: a still-valid cached token needs no client credentials, so the fast
+	// path must keep working even when the config carries no client_id/secret.
+	srv := fixtureServer(t)
+	withBaseURL(t, srv.URL)
+
+	dir := t.TempDir()
+	tokenPath := filepath.Join(dir, "token.json")
+	cfgPath := filepath.Join(dir, "config.json")
+	b, _ := json.Marshal(map[string]any{"token_cache": tokenPath}) // no client_id/secret
+	if err := os.WriteFile(cfgPath, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	valid := &oauth2.Token{AccessToken: "fresh", TokenType: "Bearer", Expiry: time.Now().Add(24 * time.Hour)}
+	if err := auth.SaveToken(tokenPath, valid); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := run(t, "--config", cfgPath, "data", "list", "exercise", "--date", "2026-06-16", "--days", "60"); err != nil {
+		t.Fatalf("valid token + no creds should still succeed: %v", err)
+	}
 }
 
 func TestDoctorNotAuthenticatedExits2(t *testing.T) {
@@ -220,5 +338,57 @@ func TestAuthLogout(t *testing.T) {
 	_ = json.Unmarshal([]byte(stdout), &report)
 	if report.Present {
 		t.Error("token still present after logout")
+	}
+}
+
+func TestEndToEndMigratesLegacyTokenToCacheDir(t *testing.T) {
+	// CLI conventions §1+§7, end-to-end: a token at the legacy <UserConfigDir>
+	// default is relocated to the <UserCacheDir> default through the real command
+	// tree (resolveConfig), with the session preserved. Hermetic across OSes —
+	// every base dir Go consults is overridden so the real user dirs are untouched.
+	t.Chdir(t.TempDir())
+	configBase, cacheBase, home := t.TempDir(), t.TempDir(), t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configBase) // Linux config base
+	t.Setenv("XDG_CACHE_HOME", cacheBase)   // Linux cache base
+	t.Setenv("AppData", configBase)         // Windows %AppData% (config base)
+	t.Setenv("LocalAppData", cacheBase)     // Windows %LocalAppData% (cache base)
+	t.Setenv("HOME", home)                  // macOS ~/Library/* base
+	// Neutralize inherited overrides so the defaults are used (migration only runs
+	// for the default path).
+	t.Setenv(config.EnvConfig, "")
+	t.Setenv(config.EnvTokenCache, "")
+
+	legacy := config.LegacyTokenCachePath()
+	if legacy == "" {
+		t.Skip("no user config dir resolvable on this platform")
+	}
+	cfg, err := config.Load(config.Options{})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	newPath := cfg.TokenCache
+	if newPath == legacy {
+		t.Fatalf("new (%s) and legacy token paths coincide — cannot prove relocation", newPath)
+	}
+
+	tok := &oauth2.Token{AccessToken: "live", RefreshToken: "r", TokenType: "Bearer", Expiry: time.Now().Add(24 * time.Hour)}
+	if err := auth.SaveToken(legacy, tok); err != nil {
+		t.Fatal(err)
+	}
+
+	// Any command through the tree triggers resolveConfig, which performs the move.
+	if _, _, rerr := run(t, "config", "path"); rerr != nil {
+		t.Fatalf("config path: %v", rerr)
+	}
+
+	if got, _ := auth.LoadToken(legacy); got != nil {
+		t.Errorf("legacy token still present at %s after migration", legacy)
+	}
+	moved, err := auth.LoadToken(newPath)
+	if err != nil || moved == nil {
+		t.Fatalf("token not found at new cache path %s: %v", newPath, err)
+	}
+	if moved.AccessToken != "live" {
+		t.Errorf("relocated token AccessToken = %q, want live (session not preserved)", moved.AccessToken)
 	}
 }

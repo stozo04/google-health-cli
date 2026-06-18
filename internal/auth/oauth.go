@@ -169,15 +169,20 @@ func writeBrowserPage(w http.ResponseWriter, ok bool, msg string) {
 // OpenBrowser opens url in the user's default browser. Best-effort: a non-nil
 // error means the caller should print the URL for the user to open manually.
 func OpenBrowser(url string) error {
-	var cmd *exec.Cmd
+	var name string
+	var args []string
 	switch runtime.GOOS {
 	case "windows":
 		// rundll32 avoids cmd.exe quoting pitfalls with the URL's & and ?.
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+		name, args = "rundll32", []string{"url.dll,FileProtocolHandler", url}
 	case "darwin":
-		cmd = exec.Command("open", url)
+		name, args = "open", []string{url}
 	default:
-		cmd = exec.Command("xdg-open", url)
+		name, args = "xdg-open", []string{url}
 	}
+	// G204: the executable name is a hardcoded per-OS constant and url is passed
+	// as a separate argv element (exec.Command spawns no shell), so there is no
+	// command-injection vector — the gosec finding is a false positive here.
+	cmd := exec.Command(name, args...) //nolint:gosec // G204: const exe name, URL passed as argv, no shell.
 	return cmd.Start()
 }

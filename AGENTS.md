@@ -10,12 +10,17 @@ machine-readable output (some commands are JSON-only — noted below).
 |---|---|
 | `0` | Success |
 | `2` | Auth / API failure (no/invalid token, refresh failure, non-2xx response, bad JSON) — and `doctor` when not authenticated |
-| `64` | Usage error (bad flags, bad `--date`, unknown data type, non-listable type) |
-| `78` | Config error (unreadable / invalid `config.json`) |
+| `64` | Usage error (bad flags, bad `--date`, unknown data type, non-listable type, or an expired token with no OAuth client credentials to refresh it) |
+| `78` | Config error (unreadable / invalid `config.json`; `doctor` when no config / no `client_id` is found) |
 | `1` | Other failure |
 
 When not authenticated, API commands print `Not authenticated. Run:  google-health-cli auth login` to stderr
 and exit `2`.
+
+When the cached token has **expired** and no OAuth client credentials were resolved (no config found, or a
+config without `client_id`/`client_secret`), API commands fail fast with exit `64` and an actionable message
+naming the discovery order — rather than the cryptic `oauth2 "Could not determine client ID"` error from the
+token endpoint. Run `doctor` to diagnose it.
 
 ## `data list <type>` (the core)
 
@@ -146,12 +151,20 @@ google-health-cli api get /v4/users/me/profile
   "user": "users/me",
   "tokenPath": "<token cache path>",
   "configPath": "<config.json path>",
+  "configFound": true,
+  "clientIdLoaded": true,
   "scopes": ["...readonly", "..."],
   "version": "<version>"
 }
 ```
 
-`tokenValid` is the frozen key. Exit `2` when it is `false` (the JSON is still printed first).
+`tokenValid` is the frozen key. `configFound` is whether `configPath` exists on disk; `clientIdLoaded`
+is whether an OAuth `client_id` was resolved (from the file or env). The JSON is always printed first, then:
+
+- exit `78` (with a stderr warning naming the search order) when no config was found or it lacks
+  `client_id`/`client_secret` — this is the root cause of the cryptic `oauth2 "Could not determine client
+  ID"` refresh failure, so `doctor` flags it explicitly rather than staying silent;
+- otherwise exit `2` when `tokenValid` is `false`.
 
 ## `auth status --json`
 
