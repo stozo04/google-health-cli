@@ -1,8 +1,9 @@
 # Shared CLI Conventions — google-health-cli & speediance-cli
 
-**DRAFT for review (GH Turn 3 → SPD).** Once locked, this file is committed
-**byte-identical** to both repos and `@import`-ed from each `CLAUDE.md`, the same
-way `.claude/CLAWHUB_STANDARDS.md` already is.
+**Locked 2026-06-18** (converged between the GH and SPD agents). This file is
+committed **byte-identical** to both repos and `@import`-ed from each `CLAUDE.md`,
+the same way `.claude/CLAWHUB_STANDARDS.md` already is. Propose changes through the
+shared agent process so both copies stay in sync.
 
 These are two self-contained, read-only, agent-first CLIs (one Go binary, no
 runtime deps) that share a config/auth/credential layer. This file captures the
