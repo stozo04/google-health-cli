@@ -33,9 +33,12 @@ func repoRoot(t *testing.T) string {
 // user warnings" findings. SKILL.md must carry (1) a prominent privacy warning
 // that the JSON on stdout is sensitive health data that downstream agents may
 // log/transmit/persist, (2) a warning that the `api get` escape hatch reaches
-// sensitive profile/settings endpoints, and (3) a warning that `doctor` prints
+// sensitive profile/settings endpoints, (3) a warning that `doctor` prints
 // local environment metadata (token/config paths, account, base URL) an agent may
-// log or forward. If any warning is removed or weakened, this test fails.
+// log or forward, (4) data-minimization guidance and operator-consent
+// expectations, and (5) a warning that the OAuth credentials and cached token are
+// sensitive plaintext secrets to protect. If any warning is removed or weakened,
+// this test fails — fix by keeping the warning, never by deleting the test.
 func TestSkillDocWarnsAboutSensitiveOutput(t *testing.T) {
 	root := repoRoot(t)
 	raw, err := os.ReadFile(filepath.Join(root, "SKILL.md"))
@@ -55,10 +58,48 @@ func TestSkillDocWarnsAboutSensitiveOutput(t *testing.T) {
 		{"calls out the profile/settings reach of api get", "users/me/profile"},
 		{"warns doctor emits local environment metadata", "local environment metadata"},
 		{"names doctor's path/account output", "token-cache and config file paths"},
+		{"gives data-minimization guidance", "Data minimization"},
+		{"sets operator-consent expectations", "knowingly consented"},
+		{"warns the credentials are secrets to protect", "Protect your credentials"},
+		{"notes the credentials are stored in plaintext", "sensitive secrets stored on disk in plaintext"},
 	}
 	for _, r := range required {
 		if !strings.Contains(skill, r.marker) {
 			t.Errorf("SKILL.md missing required warning (%s): %q not found", r.why, r.marker)
+		}
+	}
+}
+
+// TestAgentsDocWarnsAboutPrivacyAndConsent is the immutable guard mirroring the
+// SKILL.md warnings into AGENTS.md — the machine contract a ClawHub reviewer reads
+// as "the contract." It must carry a prominent privacy/data-minimization/consent
+// section: the sensitive-stdout warning, data-minimization guidance, operator
+// consent expectations, the credentials-are-plaintext-secrets warning, and the
+// api get profile/settings reach. Fix a failure by restoring the warning, never by
+// deleting the test.
+func TestAgentsDocWarnsAboutPrivacyAndConsent(t *testing.T) {
+	root := repoRoot(t)
+	raw, err := os.ReadFile(filepath.Join(root, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("read AGENTS.md: %v", err)
+	}
+	agents := string(raw)
+
+	required := []struct {
+		why    string
+		marker string
+	}{
+		{"a prominent privacy/minimization/consent section", "Privacy, data minimization & consent"},
+		{"names the sensitive sink behaviors", "logged, summarized, persisted, or transmitted"},
+		{"gives data-minimization guidance", "Data minimization"},
+		{"sets operator-consent expectations", "Operator consent"},
+		{"reinforces that consent is read-only, not downstream collection", "knowingly consented"},
+		{"warns the credentials are sensitive plaintext secrets", "Credentials are sensitive secrets"},
+		{"flags the api get profile/settings reach", "users/me/profile"},
+	}
+	for _, r := range required {
+		if !strings.Contains(agents, r.marker) {
+			t.Errorf("AGENTS.md missing required warning (%s): %q not found", r.why, r.marker)
 		}
 	}
 }

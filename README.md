@@ -121,6 +121,12 @@ upgrading users keep their session without re-authenticating.
 
 ## Notes
 
+- **Privacy, data minimization & consent.** stdout carries sensitive health PII (and, via `api get`,
+  profile/settings) that a downstream agent may log, persist, or transmit — request the narrowest window
+  and only the data types you need, and run only against an account whose owner has consented to having
+  their health data read. The OAuth `client_id`/`client_secret` and the cached token are sensitive secrets
+  stored on disk in plaintext — keep them `0600`, gitignored, and out of shared folders, backups, and logs.
+  See **[SKILL.md](SKILL.md)** and **[AGENTS.md](AGENTS.md)** for the full guidance.
 - **Read-only.** The tool requests only read scopes and never mutates your data. The six scopes are the
   read-only forms of: profile, settings, activity & fitness, health metrics & measurements, sleep, nutrition.
 - The OAuth token is cached locally (`0600`) and auto-refreshed; the refreshed token is re-persisted so it
