@@ -4,6 +4,39 @@ google-health-cli is a read-only Google Health data extractor. It emits your hea
 no filtering, merging, or interpretation. **stdout is data; stderr is hints/logs/errors.** Pass `--json` for
 machine-readable output (some commands are JSON-only — noted below).
 
+## Privacy, data minimization & consent (read before piping this anywhere)
+
+> 🔒 **This tool emits sensitive personal health data.** Every `data list`, `rollup daily`,
+> `sessions`, and `api get` prints **personal health information** (heart rate, sleep, weight,
+> exercise, blood oxygen, …) — and, via `api get`, **profile/account and settings** data — to
+> **stdout** as JSON. In an agent or pipeline, stdout may be
+> **logged, summarized, persisted, or transmitted** to other tools, model providers, or third
+> parties. Treat every byte on stdout as
+> sensitive PII. The binary itself never sends your data anywhere (it only calls Google's API over
+> HTTPS); what happens to the output afterward is the **caller's** responsibility.
+
+**Data minimization — request only what you need.**
+
+- Read the **narrowest time window** that answers the question (`--days`/`--date`/`--from`/`--to`),
+  not `--all`, and only the **specific data types** you need — never sweep every type by reflex.
+- Prefer the typed `data` / `rollup` / `sessions` commands over `api get`; reach for `api get`
+  (and especially `users/me/profile` / `users/me/settings`) **only** when a typed command cannot
+  answer the question.
+- Don't persist, forward, or echo the output beyond the immediate task; drop it when done.
+
+**Operator consent.** Run this only against an account whose owner has **knowingly consented** to
+having their health data read and handled by this agent/pipeline. The one-time browser `auth login`
+is the account owner consenting to **read-only access for the tool** — it is **not** consent for a
+downstream agent to collect, retain, or transmit that data more broadly. If you operate on someone
+else's behalf, obtain that consent first and honor its limits.
+
+**Credentials are sensitive secrets, stored locally in plaintext.** The OAuth `client_id` /
+`client_secret` (in `config.json` or the `GOOGLE_HEALTH_*` env vars) and the cached OAuth **token**
+(`token.json`) are credentials written to disk **unencrypted**. They are created `0600` (owner-only)
+and the secret files are gitignored — **keep them that way**: never commit them, never copy them into
+a shared directory, backup, log, or chat, and rotate the OAuth client (run `auth logout`) if one may
+have leaked.
+
 ## Exit codes
 
 | Code | Meaning |

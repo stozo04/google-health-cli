@@ -52,10 +52,13 @@ guard the moment a change makes that category exploitable.
   CLI is a *dumb data collector*: read-only, makes no decisions, does no filtering/merging/
   interpretation (the consumer owns that). Catalog scope creep is blocked by the read-only
   allowlist. → rule 1 + the architecture invariant.
-- **Output Handling** (unvalidated output injection, cross-context output, unbounded output) —
-  stdout is the API's raw JSON bytes, verbatim; the **Privacy** callouts warn that this output
-  crosses into agent/log/pipeline contexts; counts/hints go to stderr. Callers must treat stdout
-  as untrusted data. → rule 3.
+- **Output Handling / Missing User Warnings** (unvalidated output injection, cross-context output,
+  unbounded output; sensitive data emitted without a caller warning) — stdout is the API's raw JSON
+  bytes, verbatim; the **Privacy / data-minimization / consent** callouts (in both `SKILL.md` and
+  `AGENTS.md`) warn that this output crosses into agent/log/pipeline contexts, tell the caller to
+  request the narrowest data and obtain owner consent, and flag the OAuth secrets + token as
+  sensitive plaintext on disk; counts/hints go to stderr. Callers must treat stdout as untrusted
+  data. → rule 3.
 - **System Prompt Leakage** (direct, indirect, tool-based) — **N/A**: a CLI binary carries no
   system prompt, and `SKILL.md` hides no instructions to leak.
 - **Memory Poisoning** (persistent context injection, context-window stuffing, memory
@@ -101,14 +104,30 @@ guard the moment a change makes that category exploitable.
 2. **Least privilege, declared honestly.** Request only the scopes you use; list only the network
    hosts you actually call and the files you actually read/write in the `metadata.openclaw`
    `permissions` block. Keep that block truthful and in sync with behavior.
-3. **Warn about sensitive output.** If any command prints PII/health/secret data to stdout or
-   writes it to disk, user-facing docs must carry a **prominent privacy warning**: the output is
-   sensitive, and downstream agents/pipelines may log, summarize, persist, or transmit it. Call
-   out any unusually broad surface (e.g. a raw "GET any path" escape hatch) separately. This is
-   **not limited to health/secret payloads**: a diagnostic that emits *local environment
-   metadata* — filesystem paths, the configured account/user, base URLs (e.g. `doctor`) — also
-   leaks filesystem layout and account identifiers an agent may log or forward, so it needs its
-   own warning too. Don't redact metadata a diagnostic exists to surface; warn instead.
+3. **Warn about sensitive output — and tell the caller how to handle it.** If any command prints
+   PII/health/secret data to stdout or writes it to disk, user-facing docs must carry a
+   **prominent privacy warning**: the output is sensitive, and downstream agents/pipelines may log,
+   summarize, persist, or transmit it. Call out any unusually broad surface (e.g. a raw "GET any
+   path" escape hatch) separately. This is **not limited to health/secret payloads**: a diagnostic
+   that emits *local environment metadata* — filesystem paths, the configured account/user, base
+   URLs (e.g. `doctor`) — also leaks filesystem layout and account identifiers an agent may log or
+   forward, so it needs its own warning too. Don't redact metadata a diagnostic exists to surface;
+   warn instead. A bare "this is sensitive" line is **not enough** — the warning must also give:
+   - **data-minimization guidance** — request the **narrowest** window and only the data types
+     actually needed; prefer the typed commands over the broad `api get` escape hatch; don't
+     persist/forward output beyond the task;
+   - **operator-consent expectations** — run only against an account whose owner has knowingly
+     consented; make clear the one-time `auth login` is the owner consenting to *read-only access
+     for the tool*, **not** consent for a downstream agent to collect/retain/transmit more broadly;
+   - **credential-protection guidance** — the OAuth `client_id`/`client_secret` and the cached
+     token are **sensitive secrets stored on disk in plaintext**; say they're written `0600` and
+     gitignored, and tell the caller to keep them out of commits, shared dirs, backups, and logs
+     (and to rotate / `auth logout` on a suspected leak). Encouraging plaintext secret storage
+     *without* this warning is itself a ClawHub "Missing User Warnings" finding.
+
+   These warnings must appear in **both** the human `SKILL.md` **and** the `AGENTS.md` machine
+   contract (a ClawHub reviewer reads `AGENTS.md` as "the contract"), and each is pinned by a guard
+   (see "How this repo enforces the rules").
 4. **No hidden or deceptive content.** No instructions embedded in parameter/field descriptions,
    no invisible or look-alike Unicode, no prompt-injection text in examples or sample data.
    Descriptions describe; they never instruct the agent to act.
@@ -141,8 +160,11 @@ guard the moment a change makes that category exploitable.
 
 - [ ] Metadata lists only operations/scopes/permissions the code actually exercises.
 - [ ] No mutating op appears anywhere a read-only tool's metadata is generated or embedded.
-- [ ] Every sensitive-output command is covered by a privacy warning in the skill docs —
-      including diagnostics that emit *local environment metadata* (paths, account, base URL).
+- [ ] Every sensitive-output command is covered by a privacy warning in **both** `SKILL.md` and
+      `AGENTS.md` — including diagnostics that emit *local environment metadata* (paths, account,
+      base URL).
+- [ ] The privacy warning also gives data-minimization guidance, operator-consent expectations,
+      and a credential-protection warning (OAuth secrets + token are sensitive plaintext on disk).
 - [ ] No hidden instructions, deceptive Unicode, or injection text in descriptions/examples.
 - [ ] Network egress and file access match the declared `permissions` block exactly.
 - [ ] No absolute paths, home dirs, usernames, or machine-local locations in tracked docs/comments/examples.
@@ -164,10 +186,13 @@ Concrete guards already in place — keep them, and add to them when you add cap
   unknown op. Verified to fail when a write op is reintroduced.
 - **Sensitive-output warnings (rule 3).** `SKILL.md` carries the Privacy callout (stdout is
   health PII that may be logged/transmitted/persisted), the `api get` sensitive-endpoint
-  warning, and the `doctor` local-environment-metadata warning (token/config paths, account,
-  base URL). `TestSkillDocWarnsAboutSensitiveOutput` (`internal/cli/skill_doc_test.go`) fails if
-  any of these warnings is removed or weakened. **Fix by keeping the warning, never by deleting
-  the test.**
+  warning, the `doctor` local-environment-metadata warning (token/config paths, account, base
+  URL), the data-minimization & operator-consent callout, and the "Protect your credentials"
+  plaintext-secrets warning. `AGENTS.md` (the machine contract) carries the same set in its
+  "Privacy, data minimization & consent" section. `TestSkillDocWarnsAboutSensitiveOutput` and
+  `TestAgentsDocWarnsAboutPrivacyAndConsent` (`internal/cli/skill_doc_test.go`) fail if any of
+  these warnings is removed or weakened in either doc. **Fix by keeping the warning, never by
+  deleting the test.**
 - **Synthetic test data (rule 8).** `TestTestdataHasNoRealisticIdentifiers`
   (`internal/cli/testdata_privacy_test.go`) walks `testdata/` and fails on a numeric `users/<id>`
   resource name or a long opaque numeric record id; the committed fixtures use the `users/me`

@@ -67,6 +67,14 @@ parse whatever you care about. Single static binary — **no Python or other run
 > anywhere itself (it only talks to Google's API over HTTPS) — what happens to stdout is the
 > caller's responsibility.
 
+> 🧭 **Data minimization & consent.** Request only the **data types** and the **narrowest time
+> window** you actually need (`--days`/`--date`/`--from`/`--to`, not `--all`); prefer the typed
+> `data`/`rollup`/`sessions` commands over `api get`; and don't persist or forward the output beyond
+> the task at hand. Run this only against an account whose owner has **knowingly consented** to
+> having their health data read by this agent — the one-time `auth login` is the owner consenting to
+> *read-only access for the tool*, not consent for a downstream agent to collect, retain, or transmit
+> that data more broadly.
+
 > 🩺 **`doctor` prints local environment metadata.** The `doctor` JSON includes your
 > **token-cache and config file paths**, the configured **account** (`user`), and the API
 > **base URL** — local filesystem layout and account identifiers rather than health data, but
@@ -115,6 +123,12 @@ human in a browser **once**. After that it runs headless (the token auto-refresh
   "client_secret": "PASTE_CLIENT_SECRET"
 }
 ```
+
+> 🔑 **Protect your credentials.** The OAuth `client_id`/`client_secret` and the cached **token**
+> are sensitive secrets stored on disk in plaintext (`config.json` / `token.json`, written `0600`).
+> They're gitignored — keep it that way: never commit them, copy them into a shared folder, back them
+> up to an untrusted location, or paste them into logs or chat. Rotate the OAuth client (and run
+> `auth logout`) if one may have leaked.
 
 ## Commands
 
