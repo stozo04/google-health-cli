@@ -15,6 +15,10 @@ machine-readable output (some commands are JSON-only — noted below).
 > sensitive PII. The binary itself never sends your data anywhere (it only calls Google's API over
 > HTTPS); what happens to the output afterward is the **caller's** responsibility.
 
+Every command that prints health data (`data list`, `rollup daily`, `sessions`, `api get`) also writes a
+one-line **privacy notice to stderr at run time** — an execution-time reminder that stdout is sensitive
+PII. It goes to stderr, so it never corrupts the JSON on stdout.
+
 **Data minimization — request only what you need.**
 
 - Read the **narrowest time window** that answers the question (`--days`/`--date`/`--from`/`--to`),
@@ -43,7 +47,7 @@ have leaked.
 |---|---|
 | `0` | Success |
 | `2` | Auth / API failure (no/invalid token, refresh failure, non-2xx response, bad JSON) — and `doctor` when not authenticated |
-| `64` | Usage error (bad flags, bad `--date`, unknown data type, non-listable type, or an expired token with no OAuth client credentials to refresh it) |
+| `64` | Usage error (bad flags, bad `--date`, unknown data type, non-listable type, an `api get` path outside the read-only `/v4/` surface, or an expired token with no OAuth client credentials to refresh it) |
 | `78` | Config error (unreadable / invalid `config.json`; `doctor` when no config / no `client_id` is found) |
 | `1` | Other failure |
 
@@ -167,9 +171,10 @@ order frozen:
 
 ## `api get <path>` (read-only escape hatch)
 
-Authenticated GET to any v4 path; prints the response (re-indented if JSON). For endpoints the typed
-surface doesn't model — `users/me/profile`, `users/me/settings`, a single dataPoint by name. Only GET is
-offered. Exit `2` on non-2xx.
+Authenticated GET to a read-only `/v4/` path; prints the response (re-indented if JSON). For endpoints the
+typed surface doesn't model — `users/me/profile`, `users/me/settings`, a single dataPoint by name. Only GET
+is offered, and the path is **constrained to the read-only v4 surface**: a non-`v4/` path, an absolute URL,
+or a `..` traversal is rejected with exit `64` and makes **no** request. Exit `2` on non-2xx.
 
 ```sh
 google-health-cli api get /v4/users/me/profile

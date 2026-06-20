@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -100,13 +101,62 @@ func (c *Client) ListDataPoints(ctx context.Context, dt DataType, from, to time.
 	return points, nil
 }
 
-// RawGet performs one authenticated GET against path (joined to the base URL)
-// and returns the response body verbatim. It is the read-only escape hatch
-// behind the `api get` command, reaching endpoints the typed surface does not
-// model (profile, settings, identity, a single dataPoint by name, …). Non-2xx
-// responses become a typed *Error carrying Google's message.
+// ErrPathNotAllowed is returned by RawGet when the requested path falls outside
+// the advertised read-only Google Health v4 surface — a non-`v4/` path, an
+// absolute URL / "//authority", or a parent-directory traversal. The CLI maps it
+// to a usage error (exit 64). It exists so the `api get` escape hatch's *actual*
+// reach equals what the tool advertises (a read-only v4 GET), closing the
+// description/behavior gap a scanner would otherwise flag.
+var ErrPathNotAllowed = errors.New("path is outside the read-only Google Health v4 surface")
+
+// validateRawPath enforces that RawGet can address only the read-only v4 surface.
+// A GET is already non-mutating, but without this a caller could aim the path at
+// any endpoint under the configured base host — or, via a smuggled scheme or
+// protocol-relative "//authority", at a different host entirely. We therefore
+// require a "v4/…" path and reject absolute URLs and ".." traversal. It returns
+// the cleaned, base-relative path (leading slash removed) on success.
+func validateRawPath(path string) (string, error) {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return "", fmt.Errorf("%w: empty path (expected e.g. v4/users/me/profile)", ErrPathNotAllowed)
+	}
+	// No absolute URL or protocol-relative authority: the escape hatch may only
+	// address the configured base host, never an arbitrary one.
+	if strings.Contains(trimmed, "://") || strings.HasPrefix(trimmed, "//") {
+		return "", fmt.Errorf("%w: %q must be a base-relative v4 path, not an absolute URL", ErrPathNotAllowed, path)
+	}
+	rel := strings.TrimLeft(trimmed, "/")
+	// Inspect the path portion (excluding any query/fragment) for traversal and
+	// the required v4 prefix.
+	pathPart := rel
+	if i := strings.IndexAny(pathPart, "?#"); i >= 0 {
+		pathPart = pathPart[:i]
+	}
+	for _, seg := range strings.Split(pathPart, "/") {
+		if seg == ".." {
+			return "", fmt.Errorf("%w: %q must not contain '..' segments", ErrPathNotAllowed, path)
+		}
+	}
+	if pathPart != "v4" && !strings.HasPrefix(pathPart, "v4/") {
+		return "", fmt.Errorf("%w: %q is not a /v4/ path (api get reaches only read-only v4 endpoints)", ErrPathNotAllowed, path)
+	}
+	return rel, nil
+}
+
+// RawGet performs one authenticated GET against path (joined to the base URL) and
+// returns the response body verbatim. It is the read-only escape hatch behind the
+// `api get` command, reaching read-only v4 endpoints the typed surface does not
+// model (profile, settings, identity, a single dataPoint by name, …). The path is
+// validated to the read-only v4 surface first (see validateRawPath): a non-`v4/`
+// path, an absolute URL, or a ".." traversal is rejected with ErrPathNotAllowed
+// and makes no network call. Non-2xx responses become a typed *Error carrying
+// Google's message.
 func (c *Client) RawGet(ctx context.Context, path string) (json.RawMessage, error) {
-	reqURL := c.baseURL + "/" + strings.TrimLeft(path, "/")
+	rel, err := validateRawPath(path)
+	if err != nil {
+		return nil, err
+	}
+	reqURL := c.baseURL + "/" + rel
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)

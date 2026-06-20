@@ -99,6 +99,61 @@ func TestListDataPoints_ErrorEnvelope(t *testing.T) {
 	}
 }
 
+// TestRawGet_RejectsPathsOutsideV4Surface is the immutable guard for the
+// description/behavior-mismatch finding: `api get` advertises a read-only v4 GET,
+// so RawGet must reject anything outside the v4 surface — non-v4 paths, absolute
+// URLs, "//authority" smuggling, and ".." traversal — and crucially must make NO
+// network call when it does. A real v4 path still reaches the server. Fix a
+// failure by tightening validateRawPath, never by loosening this test.
+func TestRawGet_RejectsPathsOutsideV4Surface(t *testing.T) {
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+	c := New(srv.Client(), srv.URL, "users/me", nil)
+
+	rejected := []string{
+		"",                                // empty
+		"   ",                             // blank
+		"/",                               // root, no v4
+		"v3/users/me",                     // wrong version
+		"/admin/users",                    // non-v4 endpoint
+		"users/me/profile",                // missing v4 prefix
+		"http://evil.example/v4/users/me", // absolute URL (scheme)
+		"//evil.example/v4/users/me",      // protocol-relative authority
+		"v4/../../admin",                  // parent traversal out of v4
+		"/v4/users/../../secret",          // traversal mid-path
+	}
+	for _, p := range rejected {
+		_, err := c.RawGet(context.Background(), p)
+		if err == nil {
+			t.Errorf("RawGet(%q) = nil error, want rejection", p)
+			continue
+		}
+		if !errors.Is(err, ErrPathNotAllowed) {
+			t.Errorf("RawGet(%q) error = %v, want ErrPathNotAllowed", p, err)
+		}
+	}
+	if hits != 0 {
+		t.Errorf("rejected paths made %d network request(s), want 0 (validation must precede the call)", hits)
+	}
+
+	// A genuine read-only v4 path is allowed and reaches the server.
+	body, err := c.RawGet(context.Background(), "/v4/users/me/profile")
+	if err != nil {
+		t.Fatalf("RawGet(valid v4 path) = %v, want success", err)
+	}
+	if !strings.Contains(string(body), `"ok":true`) {
+		t.Errorf("unexpected body for valid path: %s", body)
+	}
+	if hits != 1 {
+		t.Errorf("valid v4 path made %d network request(s), want 1", hits)
+	}
+}
+
 func TestListDataPoints_Empty(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{}`)) // no dataPoints key at all.

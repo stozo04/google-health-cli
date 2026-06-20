@@ -96,6 +96,7 @@ func (a *App) runDataList(cmd *cobra.Command, typeName, date string, days int, f
 	for _, p := range points {
 		raws = append(raws, p.Raw)
 	}
+	emitPrivacyNotice(cmd.ErrOrStderr())
 	if err := writeJSON(cmd.OutOrStdout(), raws); err != nil {
 		return err
 	}

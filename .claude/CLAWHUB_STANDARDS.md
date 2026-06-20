@@ -51,14 +51,18 @@ guard the moment a change makes that category exploitable.
 - **Excessive Agency** (unrestricted tool access, autonomous decision-making, scope creep) — the
   CLI is a *dumb data collector*: read-only, makes no decisions, does no filtering/merging/
   interpretation (the consumer owns that). Catalog scope creep is blocked by the read-only
-  allowlist. → rule 1 + the architecture invariant.
+  allowlist; the `api get` escape hatch is constrained to the read-only `/v4/` surface so its
+  *actual* reach equals its *advertised* reach (guarded by
+  `TestRawGet_RejectsPathsOutsideV4Surface`). → rule 1 + the architecture invariant.
 - **Output Handling / Missing User Warnings** (unvalidated output injection, cross-context output,
   unbounded output; sensitive data emitted without a caller warning) — stdout is the API's raw JSON
   bytes, verbatim; the **Privacy / data-minimization / consent** callouts (in both `SKILL.md` and
   `AGENTS.md`) warn that this output crosses into agent/log/pipeline contexts, tell the caller to
   request the narrowest data and obtain owner consent, and flag the OAuth secrets + token as
-  sensitive plaintext on disk; counts/hints go to stderr. Callers must treat stdout as untrusted
-  data. → rule 3.
+  sensitive plaintext on disk; counts/hints go to stderr. On top of the docs, every data-emitting
+  command prints an **execution-time privacy notice to stderr** (guarded by
+  `TestDataEmittingCommandsWarnAtRuntime`) — a runtime heads-up, not just prose. Callers must treat
+  stdout as untrusted data. → rule 3.
 - **System Prompt Leakage** (direct, indirect, tool-based) — **N/A**: a CLI binary carries no
   system prompt, and `SKILL.md` hides no instructions to leak.
 - **Memory Poisoning** (persistent context injection, context-window stuffing, memory
@@ -66,8 +70,9 @@ guard the moment a change makes that category exploitable.
   that its *output and descriptions* carry no injection that could poison a consuming agent's
   context. → rules 3–4.
 - **Tool Misuse** (parameter abuse, chaining abuse, unsafe defaults) — defaults are safe:
-  `api get` is GET-only (no path can write/delete), window flags default to a bounded range,
-  secrets default to `0600`. → rule 1; CLI_CONVENTIONS §3.
+  `api get` is GET-only (no path can write/delete) **and** constrained to the read-only `/v4/`
+  surface (no absolute-URL/host smuggling, no `..` traversal), window flags default to a bounded
+  range, secrets default to `0600`. → rule 1; CLI_CONVENTIONS §3.
 - **Rogue Agent** (self-modification, session persistence) — the binary never rewrites itself or
   installs background persistence; the only persisted state is the declared token cache. → rule 2;
   CLI_CONVENTIONS §1–2.
@@ -100,7 +105,12 @@ guard the moment a change makes that category exploitable.
 1. **Advertised capability == actual capability.** Never declare an operation, scope, endpoint,
    or permission the code does not use. If the tool is read-only, its metadata must contain
    **zero** mutating operations (`create`/`update`/`patch`/`delete`/`batchDelete`/…) — even when
-   the upstream API defines them. Strip them; don't carry them as "documentation."
+   the upstream API defines them. Strip them; don't carry them as "documentation." The inverse
+   holds for a generic **escape hatch** (e.g. `api get`): it must not *reach further* than
+   advertised. Constrain it to the advertised surface — the read-only `/v4/` paths — so a caller
+   can't aim it at arbitrary, off-host, or traversal paths. A GET being non-mutating is not enough;
+   the *path* surface must match the description too. (Guard:
+   `TestRawGet_RejectsPathsOutsideV4Surface`.)
 2. **Least privilege, declared honestly.** Request only the scopes you use; list only the network
    hosts you actually call and the files you actually read/write in the `metadata.openclaw`
    `permissions` block. Keep that block truthful and in sync with behavior.
@@ -127,7 +137,11 @@ guard the moment a change makes that category exploitable.
 
    These warnings must appear in **both** the human `SKILL.md` **and** the `AGENTS.md` machine
    contract (a ClawHub reviewer reads `AGENTS.md` as "the contract"), and each is pinned by a guard
-   (see "How this repo enforces the rules").
+   (see "How this repo enforces the rules"). Docs alone are **not sufficient** for the data-emitting
+   commands: in an agent setting stdout is often auto-captured and forwarded, so each command that
+   prints health data must **also emit an execution-time privacy notice to stderr** (a runtime
+   heads-up, never on stdout — stdout stays machine-readable data). Guard:
+   `TestDataEmittingCommandsWarnAtRuntime`.
 4. **No hidden or deceptive content.** No instructions embedded in parameter/field descriptions,
    no invisible or look-alike Unicode, no prompt-injection text in examples or sample data.
    Descriptions describe; they never instruct the agent to act.
@@ -165,6 +179,10 @@ guard the moment a change makes that category exploitable.
       base URL).
 - [ ] The privacy warning also gives data-minimization guidance, operator-consent expectations,
       and a credential-protection warning (OAuth secrets + token are sensitive plaintext on disk).
+- [ ] Every command that prints health data emits an execution-time privacy notice to stderr
+      (runtime warning, not just docs) — and never on stdout.
+- [ ] Any generic escape hatch (e.g. `api get`) is constrained to its advertised surface (read-only
+      `/v4/` paths; no absolute-URL/host smuggling or `..` traversal), with no network call on reject.
 - [ ] No hidden instructions, deceptive Unicode, or injection text in descriptions/examples.
 - [ ] Network egress and file access match the declared `permissions` block exactly.
 - [ ] No absolute paths, home dirs, usernames, or machine-local locations in tracked docs/comments/examples.
@@ -193,6 +211,18 @@ Concrete guards already in place — keep them, and add to them when you add cap
   `TestAgentsDocWarnsAboutPrivacyAndConsent` (`internal/cli/skill_doc_test.go`) fail if any of
   these warnings is removed or weakened in either doc. **Fix by keeping the warning, never by
   deleting the test.**
+- **Execution-time privacy notice (rule 3).** Every command that prints health data (`data list`,
+  `rollup daily`, `sessions`, `api get`) calls `emitPrivacyNotice` (`internal/cli/privacy.go`),
+  which writes a one-line PII warning to **stderr** (never stdout). `TestDataEmittingCommandsWarnAtRuntime`
+  (`internal/cli/commands_test.go`) fails if any of those commands stops emitting the notice, or if
+  it leaks onto stdout. **Fix by restoring the call, never by deleting the test.**
+- **Escape-hatch reach == advertised reach (rule 1).** `api get` is constrained to the read-only
+  `/v4/` surface by `validateRawPath` in `internal/api/client.go`; a non-`v4/` path, an absolute
+  URL/authority, or a `..` traversal returns `ErrPathNotAllowed` (mapped to exit 64 by the CLI) and
+  makes **no** network call. `TestRawGet_RejectsPathsOutsideV4Surface`
+  (`internal/api/client_test.go`) and `TestAPIGetRejectsNonV4PathAsUsageError`
+  (`internal/cli/commands_test.go`) pin both the rejection and the no-network guarantee. **Fix a
+  failure by tightening `validateRawPath`, never by loosening the test.**
 - **Synthetic test data (rule 8).** `TestTestdataHasNoRealisticIdentifiers`
   (`internal/cli/testdata_privacy_test.go`) walks `testdata/` and fails on a numeric `users/<id>`
   resource name or a long opaque numeric record id; the committed fixtures use the `users/me`

@@ -65,6 +65,7 @@ func (a *App) runSessions(cmd *cobra.Command, date string, days int, raw, asJSON
 		return err
 	}
 
+	emitPrivacyNotice(cmd.ErrOrStderr())
 	out := cmd.OutOrStdout()
 	if raw {
 		// Dump the raw API data-point list exactly. RawMessage preserves each
