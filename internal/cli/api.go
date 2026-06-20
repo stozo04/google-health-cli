@@ -2,8 +2,11 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 
 	"github.com/spf13/cobra"
+
+	"github.com/stozo04/google-health-cli/internal/api"
 )
 
 // newAPICmd is the raw, read-only escape hatch: `api get <path>` issues an
@@ -38,8 +41,14 @@ func newAPIGetCmd(app *App) *cobra.Command {
 			}
 			body, err := client.RawGet(cmd.Context(), args[0])
 			if err != nil {
+				// A path outside the read-only v4 surface is a usage error (64),
+				// not an auth/API failure (2).
+				if errors.Is(err, api.ErrPathNotAllowed) {
+					return withCode(ExitUsage, err)
+				}
 				return withCode(ExitAuth, err)
 			}
+			emitPrivacyNotice(cmd.ErrOrStderr())
 			out := cmd.OutOrStdout()
 			if json.Valid(body) {
 				return writeJSON(out, body) // re-indent for readability.

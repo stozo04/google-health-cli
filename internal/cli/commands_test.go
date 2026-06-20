@@ -144,6 +144,81 @@ func TestDataListUnknownTypeIsUsageError(t *testing.T) {
 	}
 }
 
+// TestAPIGetRejectsNonV4PathAsUsageError guards that the `api get` escape hatch's
+// path validation surfaces as a usage error (exit 64), not an auth/API failure,
+// and (implicitly) that a non-v4 path never reaches the network. Pairs with
+// api.TestRawGet_RejectsPathsOutsideV4Surface, which proves the no-network claim.
+func TestAPIGetRejectsNonV4PathAsUsageError(t *testing.T) {
+	cfg := testConfig(t, true) // valid token, so we get past auth to path validation
+	for _, path := range []string{"/v3/users/me", "http://evil.example/v4/x", "/admin"} {
+		_, _, err := run(t, "--config", cfg, "api", "get", path)
+		var exit *ExitError
+		if !errors.As(err, &exit) || exit.Code != ExitUsage {
+			t.Errorf("api get %q: err = %v, want ExitError code %d", path, err, ExitUsage)
+		}
+	}
+}
+
+// TestDataEmittingCommandsWarnAtRuntime is the immutable guard for the
+// "missing user warnings" runtime finding: every command that prints personal
+// health data must emit the execution-time privacy notice to stderr (and never to
+// stdout, which is machine-readable data). Removing emitPrivacyNotice from any
+// data-emitting command fails this. Fix by restoring the call, never by deleting
+// the test.
+func TestDataEmittingCommandsWarnAtRuntime(t *testing.T) {
+	cfg := testConfig(t, true)
+
+	check := func(t *testing.T, stdout, stderr string) {
+		t.Helper()
+		if !strings.Contains(stderr, privacyNotice) {
+			t.Errorf("stderr missing runtime privacy notice; got: %q", stderr)
+		}
+		if strings.Contains(stdout, privacyNotice) {
+			t.Error("privacy notice leaked onto stdout (must be stderr only — stdout is data)")
+		}
+	}
+
+	t.Run("data list", func(t *testing.T) {
+		srv := fixtureServer(t)
+		withBaseURL(t, srv.URL)
+		stdout, stderr, err := run(t, "--config", cfg, "data", "list", "exercise", "--date", "2026-06-16", "--days", "60")
+		if err != nil {
+			t.Fatalf("data list: %v", err)
+		}
+		check(t, stdout, stderr)
+	})
+
+	t.Run("sessions", func(t *testing.T) {
+		srv := fixtureServer(t)
+		withBaseURL(t, srv.URL)
+		stdout, stderr, err := run(t, "--config", cfg, "sessions", "--json", "--date", "2026-06-16", "--days", "60")
+		if err != nil {
+			t.Fatalf("sessions: %v", err)
+		}
+		check(t, stdout, stderr)
+	})
+
+	t.Run("rollup daily", func(t *testing.T) {
+		srv, _ := rollupFixtureServer(t)
+		withBaseURL(t, srv.URL)
+		stdout, stderr, err := run(t, "--config", cfg, "rollup", "daily", "steps", "--date", "2026-06-16", "--days", "2")
+		if err != nil {
+			t.Fatalf("rollup daily: %v", err)
+		}
+		check(t, stdout, stderr)
+	})
+
+	t.Run("api get", func(t *testing.T) {
+		srv := fixtureServer(t)
+		withBaseURL(t, srv.URL)
+		stdout, stderr, err := run(t, "--config", cfg, "api", "get", "/v4/users/me/profile")
+		if err != nil {
+			t.Fatalf("api get: %v", err)
+		}
+		check(t, stdout, stderr)
+	})
+}
+
 func TestTypesListJSON(t *testing.T) {
 	stdout, _, err := run(t, "types", "list", "--json")
 	if err != nil {

@@ -65,7 +65,9 @@ parse whatever you care about. Single static binary — **no Python or other run
 > parties. Treat this output as sensitive PII: only run it in contexts you trust to handle health
 > data, and do not persist or forward it unless you intend to. The tool never sends your data
 > anywhere itself (it only talks to Google's API over HTTPS) — what happens to stdout is the
-> caller's responsibility.
+> caller's responsibility. Every data-emitting command also prints a one-line
+> **privacy notice to stderr** at run time as an execution-time reminder (it stays on stderr, never
+> on the JSON stdout).
 
 > 🧭 **Data minimization & consent.** Request only the **data types** and the **narrowest time
 > window** you actually need (`--days`/`--date`/`--from`/`--to`, not `--all`); prefer the typed
@@ -222,7 +224,9 @@ google-health-cli api get /v4/users/me/settings
 > read-only v4 path, including `users/me/profile` and `users/me/settings` — account, identity, and
 > settings data that the typed commands don't surface. Its responses are personal data printed to
 > stdout, so the same **Privacy** caution above applies, and the broad reach makes
-> over-collection easy. It stays **GET-only** (no path can write or delete), but prefer the typed
+> over-collection easy. It stays **GET-only** (no path can write or delete) and is
+> **constrained to the read-only v4 surface** (`/v4/...`): a non-`v4/` path, an absolute URL, or a
+> `..` traversal is rejected (exit 64) before any request is made. Still, prefer the typed
 > `data`/`rollup`/`sessions` commands and reach for `api get` only when you need an endpoint they
 > don't model.
 

@@ -126,6 +126,8 @@ upgrading users keep their session without re-authenticating.
   and only the data types you need, and run only against an account whose owner has consented to having
   their health data read. The OAuth `client_id`/`client_secret` and the cached token are sensitive secrets
   stored on disk in plaintext — keep them `0600`, gitignored, and out of shared folders, backups, and logs.
+  Every data-emitting command prints a one-line privacy notice to stderr at run time, and `api get` is
+  constrained to read-only `/v4/` paths (a non-`v4/` path, absolute URL, or `..` traversal is rejected).
   See **[SKILL.md](SKILL.md)** and **[AGENTS.md](AGENTS.md)** for the full guidance.
 - **Read-only.** The tool requests only read scopes and never mutates your data. The six scopes are the
   read-only forms of: profile, settings, activity & fitness, health metrics & measurements, sleep, nutrition.

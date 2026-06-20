@@ -62,6 +62,8 @@ func TestSkillDocWarnsAboutSensitiveOutput(t *testing.T) {
 		{"sets operator-consent expectations", "knowingly consented"},
 		{"warns the credentials are secrets to protect", "Protect your credentials"},
 		{"notes the credentials are stored in plaintext", "sensitive secrets stored on disk in plaintext"},
+		{"documents the runtime stderr privacy notice", "privacy notice to stderr"},
+		{"documents api get is limited to the v4 surface", "constrained to the read-only v4 surface"},
 	}
 	for _, r := range required {
 		if !strings.Contains(skill, r.marker) {
@@ -96,6 +98,8 @@ func TestAgentsDocWarnsAboutPrivacyAndConsent(t *testing.T) {
 		{"reinforces that consent is read-only, not downstream collection", "knowingly consented"},
 		{"warns the credentials are sensitive plaintext secrets", "Credentials are sensitive secrets"},
 		{"flags the api get profile/settings reach", "users/me/profile"},
+		{"documents the runtime stderr privacy notice", "privacy notice to stderr at run time"},
+		{"documents api get is limited to the v4 surface", "constrained to the read-only v4 surface"},
 	}
 	for _, r := range required {
 		if !strings.Contains(agents, r.marker) {

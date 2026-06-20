@@ -85,6 +85,7 @@ func (a *App) runRollupDaily(cmd *cobra.Command, typeName, date string, days int
 		return withCode(ExitAuth, err)
 	}
 
+	emitPrivacyNotice(cmd.ErrOrStderr())
 	if err := writeJSON(cmd.OutOrStdout(), points); err != nil {
 		return err
 	}
