@@ -103,7 +103,8 @@ func (c *Client) ListDataPoints(ctx context.Context, dt DataType, from, to time.
 
 // ErrPathNotAllowed is returned by RawGet when the requested path falls outside
 // the advertised read-only Google Health v4 surface — a non-`v4/` path, an
-// absolute URL / "//authority", or a parent-directory traversal. The CLI maps it
+// absolute URL / "//authority", or a parent-directory traversal, whether
+// literal ("..") or percent-encoded ("%2e%2e", "..%2f"). The CLI maps it
 // to a usage error (exit 64). It exists so the `api get` escape hatch's *actual*
 // reach equals what the tool advertises (a read-only v4 GET), closing the
 // description/behavior gap a scanner would otherwise flag.
@@ -113,8 +114,13 @@ var ErrPathNotAllowed = errors.New("path is outside the read-only Google Health 
 // A GET is already non-mutating, but without this a caller could aim the path at
 // any endpoint under the configured base host — or, via a smuggled scheme or
 // protocol-relative "//authority", at a different host entirely. We therefore
-// require a "v4/…" path and reject absolute URLs and ".." traversal. It returns
-// the cleaned, base-relative path (leading slash removed) on success.
+// require a "v4/…" path and reject absolute URLs and ".." traversal. The
+// traversal check runs on the percent-DECODED path portion: %2e is '.' and %2f
+// is '/', so "v4/%2e%2e/x" reads as "v4/../x" to any server that normalizes
+// after decoding, and a raw string comparison alone would wave it through. A
+// malformed escape (unverifiable) or a backslash (a path separator on some
+// stacks) is rejected outright. Returns the cleaned, base-relative path — with
+// its original escapes preserved for the wire — on success.
 func validateRawPath(path string) (string, error) {
 	trimmed := strings.TrimSpace(path)
 	if trimmed == "" {
@@ -132,9 +138,16 @@ func validateRawPath(path string) (string, error) {
 	if i := strings.IndexAny(pathPart, "?#"); i >= 0 {
 		pathPart = pathPart[:i]
 	}
-	for _, seg := range strings.Split(pathPart, "/") {
+	decoded, err := url.PathUnescape(pathPart)
+	if err != nil {
+		return "", fmt.Errorf("%w: %q carries a malformed percent-escape", ErrPathNotAllowed, path)
+	}
+	if strings.ContainsRune(decoded, '\\') {
+		return "", fmt.Errorf("%w: %q must not contain backslashes", ErrPathNotAllowed, path)
+	}
+	for _, seg := range strings.Split(decoded, "/") {
 		if seg == ".." {
-			return "", fmt.Errorf("%w: %q must not contain '..' segments", ErrPathNotAllowed, path)
+			return "", fmt.Errorf("%w: %q must not contain '..' segments (literal or percent-encoded)", ErrPathNotAllowed, path)
 		}
 	}
 	if pathPart != "v4" && !strings.HasPrefix(pathPart, "v4/") {
@@ -148,9 +161,9 @@ func validateRawPath(path string) (string, error) {
 // `api get` command, reaching read-only v4 endpoints the typed surface does not
 // model (profile, settings, identity, a single dataPoint by name, …). The path is
 // validated to the read-only v4 surface first (see validateRawPath): a non-`v4/`
-// path, an absolute URL, or a ".." traversal is rejected with ErrPathNotAllowed
-// and makes no network call. Non-2xx responses become a typed *Error carrying
-// Google's message.
+// path, an absolute URL, or a ".." traversal (literal or percent-encoded) is
+// rejected with ErrPathNotAllowed and makes no network call. Non-2xx responses
+// become a typed *Error carrying Google's message.
 func (c *Client) RawGet(ctx context.Context, path string) (json.RawMessage, error) {
 	rel, err := validateRawPath(path)
 	if err != nil {

@@ -1,12 +1,16 @@
 package cli
 
 import (
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/stozo04/google-health-cli/internal/config"
 )
 
 // guardedImports lists import paths that grant process execution or dynamic
@@ -103,6 +107,139 @@ func TestGuardedImportViolationLogic(t *testing.T) {
 	for _, c := range cases {
 		if got := guardedImportViolation(c.rel, c.path); got != c.want {
 			t.Errorf("guardedImportViolation(%q, %q) = %v, want %v", c.rel, c.path, got, c.want)
+		}
+	}
+}
+
+// declaredEnvVars is the closed set of environment variables the shipped
+// binary may read — exactly the GOOGLE_HEALTH_* keys advertised in SKILL.md's
+// envVars block. CLAWHUB_STANDARDS (Data Exfiltration) promises "env reads are
+// the specific GOOGLE_HEALTH_* keys via os.LookupEnv"; this guard makes that
+// promise fail the build instead of drifting (advertised == actual, both ways).
+var declaredEnvVars = map[string]bool{
+	config.EnvConfig:       true,
+	config.EnvClientID:     true,
+	config.EnvClientSecret: true,
+	config.EnvBaseURL:      true,
+	config.EnvTokenCache:   true,
+}
+
+// envConstIdents are the exported config constants naming those variables —
+// the only non-literal argument forms an env-read call may use, so every read
+// site remains statically verifiable against declaredEnvVars.
+var envConstIdents = map[string]bool{
+	"EnvConfig":       true,
+	"EnvClientID":     true,
+	"EnvClientSecret": true,
+	"EnvBaseURL":      true,
+	"EnvTokenCache":   true,
+}
+
+// allowedEnvRead reports whether shipped code may read the named variable.
+func allowedEnvRead(name string) bool { return declaredEnvVars[name] }
+
+// TestShippedSourceReadsOnlyDeclaredEnvVars walks the shipped (non-test) Go
+// source and fails on any environment read outside the declared set: an
+// os.Environ sweep, an os.Getenv/LookupEnv of an unadvertised name (this caught
+// a stray LOG_LEVEL read), or an argument too dynamic to verify. It then checks
+// the advertisement side: every declared variable must appear in SKILL.md. Fix
+// a failure by removing the read or declaring the variable in SKILL.md AND
+// here — never by deleting the test.
+func TestShippedSourceReadsOnlyDeclaredEnvVars(t *testing.T) {
+	root := repoRoot(t)
+	fset := token.NewFileSet()
+	walkErr := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", "bin", "dist", "testdata":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		rel, rerr := filepath.Rel(root, path)
+		if rerr != nil {
+			return rerr
+		}
+		rel = filepath.ToSlash(rel)
+		f, perr := parser.ParseFile(fset, path, nil, 0)
+		if perr != nil {
+			return perr
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			if pkg, ok := sel.X.(*ast.Ident); !ok || pkg.Name != "os" {
+				return true
+			}
+			switch sel.Sel.Name {
+			case "Environ":
+				t.Errorf("%s calls os.Environ(): a full environment sweep is never allowed (Data Exfiltration)", rel)
+			case "Getenv", "LookupEnv":
+				if len(call.Args) != 1 {
+					return true
+				}
+				switch arg := call.Args[0].(type) {
+				case *ast.BasicLit:
+					if name, uerr := strconv.Unquote(arg.Value); uerr == nil && !allowedEnvRead(name) {
+						t.Errorf("%s reads undeclared env var %q; declare it in SKILL.md envVars and declaredEnvVars, or remove the read", rel, name)
+					}
+				case *ast.Ident:
+					if !envConstIdents[arg.Name] {
+						t.Errorf("%s reads env via unrecognized identifier %s; use a declared Env* constant", rel, arg.Name)
+					}
+				case *ast.SelectorExpr:
+					if !envConstIdents[arg.Sel.Name] {
+						t.Errorf("%s reads env via unrecognized selector %s; use a declared config.Env* constant", rel, arg.Sel.Name)
+					}
+				default:
+					t.Errorf("%s reads env with a dynamic argument; env reads must be statically verifiable", rel)
+				}
+			}
+			return true
+		})
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("walk source tree: %v", walkErr)
+	}
+
+	// Advertisement side: every variable the binary may read is documented.
+	skill, err := os.ReadFile(filepath.Join(root, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read SKILL.md: %v", err)
+	}
+	for name := range declaredEnvVars {
+		if !strings.Contains(string(skill), name) {
+			t.Errorf("SKILL.md does not advertise env var %s, but the binary may read it", name)
+		}
+	}
+}
+
+// TestAllowedEnvReadLogic proves the env-read matcher can actually fire: the
+// declared keys pass, anything else (e.g. the LOG_LEVEL read this guard was
+// added to catch) is a violation.
+func TestAllowedEnvReadLogic(t *testing.T) {
+	for name, want := range map[string]bool{
+		config.EnvConfig:      true,
+		config.EnvTokenCache:  true,
+		"LOG_LEVEL":           false,
+		"PATH":                false,
+		"GOOGLE_HEALTH_OTHER": false,
+	} {
+		if got := allowedEnvRead(name); got != want {
+			t.Errorf("allowedEnvRead(%q) = %v, want %v", name, got, want)
 		}
 	}
 }

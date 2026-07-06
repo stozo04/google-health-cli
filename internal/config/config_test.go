@@ -32,11 +32,29 @@ func isolateAppDir(t *testing.T) (configDir, cacheDir string) {
 	return configDir, cacheDir
 }
 
+// neutralizeEnv removes every GOOGLE_HEALTH_* variable from the test process so
+// a developer's real environment (a globally exported GOOGLE_HEALTH_CONFIG,
+// client credentials, or token-cache override) can never leak into discovery
+// and flip a test's outcome. t.Setenv registers restoration of the original
+// value; the explicit Unsetenv then makes the variable truly absent — set-empty
+// is not the same as unset for applyEnv, which honors an empty override.
+// Every test that calls Load must start with this.
+func neutralizeEnv(t *testing.T) {
+	t.Helper()
+	for _, k := range []string{EnvConfig, EnvClientID, EnvClientSecret, EnvBaseURL, EnvTokenCache} {
+		t.Setenv(k, "")
+		if err := os.Unsetenv(k); err != nil {
+			t.Fatalf("unset %s: %v", k, err)
+		}
+	}
+}
+
 func TestDefaults(t *testing.T) {
 	// An empty CWD with no config.json and no env: pure defaults. Isolate the
 	// appdir fallback so a real user-config-dir config can't leak in.
 	t.Chdir(t.TempDir())
 	isolateAppDir(t)
+	neutralizeEnv(t)
 	cfg, err := Load(Options{})
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -60,6 +78,7 @@ func TestDefaults(t *testing.T) {
 func TestFileOverridesDefaults(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
+	neutralizeEnv(t)
 	// A stale daily_log / elliptical_types is silently ignored (loose decode).
 	writeConfig(t, dir, `{
 	  "client_id": "cid-from-file",
@@ -90,6 +109,7 @@ func TestFileOverridesDefaults(t *testing.T) {
 func TestEnvOverridesFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
+	neutralizeEnv(t)
 	writeConfig(t, dir, `{"client_id": "file-cid", "base_url": "https://file.test"}`)
 
 	t.Setenv(EnvClientID, "env-cid")
@@ -115,6 +135,7 @@ func TestFlagConfigPathWins(t *testing.T) {
 	// A config.json in CWD that should be ignored when --config points elsewhere.
 	cwd := t.TempDir()
 	t.Chdir(cwd)
+	neutralizeEnv(t)
 	writeConfig(t, cwd, `{"client_id": "cwd-cid"}`)
 
 	other := t.TempDir()
@@ -138,6 +159,7 @@ func TestFlagConfigPathWins(t *testing.T) {
 func TestEnvConfigSelectsFile(t *testing.T) {
 	cwd := t.TempDir()
 	t.Chdir(cwd)
+	neutralizeEnv(t)
 	// No config.json in CWD; GOOGLE_HEALTH_CONFIG points at another file.
 	other := t.TempDir()
 	otherPath := writeConfig(t, other, `{"client_id": "env-config-cid"}`)
@@ -154,6 +176,7 @@ func TestEnvConfigSelectsFile(t *testing.T) {
 
 func TestTokenCacheEnvOverride(t *testing.T) {
 	t.Chdir(t.TempDir())
+	neutralizeEnv(t)
 	t.Setenv(EnvTokenCache, "/tmp/throwaway-token.json")
 	cfg, err := Load(Options{})
 	if err != nil {
@@ -167,6 +190,7 @@ func TestTokenCacheEnvOverride(t *testing.T) {
 func TestMalformedConfigIsError(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
+	neutralizeEnv(t)
 	writeConfig(t, dir, `{not valid json`)
 	if _, err := Load(Options{}); err == nil {
 		t.Error("Load() = nil error, want parse error for malformed config")
@@ -178,6 +202,7 @@ func TestAppDirConfigDiscovered(t *testing.T) {
 	// cache (user config dir) must be auto-discovered (issue #6, AC #4).
 	t.Chdir(t.TempDir())
 	appBase, _ := isolateAppDir(t) // config.json is discovered under the config base.
+	neutralizeEnv(t)
 	appDir := filepath.Join(appBase, appDirName)
 	if err := os.MkdirAll(appDir, 0o700); err != nil {
 		t.Fatalf("mkdir appdir: %v", err)
@@ -204,6 +229,7 @@ func TestNoConfigRecordsSearchedPaths(t *testing.T) {
 	// every location consulted so callers can build a "looked at" hint.
 	t.Chdir(t.TempDir())
 	isolateAppDir(t)
+	neutralizeEnv(t)
 
 	cfg, err := Load(Options{})
 	if err != nil {
@@ -227,6 +253,7 @@ func TestFlagPathRecordsSingleSearchedPath(t *testing.T) {
 	// An explicit --config short-circuits discovery; SearchedPaths names just it.
 	t.Chdir(t.TempDir())
 	isolateAppDir(t)
+	neutralizeEnv(t)
 	missing := filepath.Join(t.TempDir(), "nope.json")
 
 	cfg, err := Load(Options{ConfigPath: missing})
@@ -248,6 +275,7 @@ func TestTokenCacheDefaultNotInWorkingDir(t *testing.T) {
 	cwd := t.TempDir()
 	t.Chdir(cwd)
 	_, cacheBase := isolateAppDir(t) // token default lives under the cache base.
+	neutralizeEnv(t)
 
 	cfg, err := Load(Options{})
 	if err != nil {
@@ -274,6 +302,7 @@ func TestTokenCacheDefaultIsNotRoaming(t *testing.T) {
 	// token across machines).
 	t.Chdir(t.TempDir())
 	configBase, cacheBase := isolateAppDir(t)
+	neutralizeEnv(t)
 
 	cfg, err := Load(Options{})
 	if err != nil {
@@ -292,6 +321,7 @@ func TestTokenCacheEnvOverrideIsNotDefault(t *testing.T) {
 	// attempted into a user-chosen path (CLI conventions §7: default-path-only).
 	t.Chdir(t.TempDir())
 	isolateAppDir(t)
+	neutralizeEnv(t)
 	t.Setenv(EnvTokenCache, filepath.Join(t.TempDir(), "custom-token.json"))
 
 	cfg, err := Load(Options{})

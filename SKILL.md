@@ -169,7 +169,9 @@ Example (`data list daily-resting-heart-rate`):
 ```
 
 A few types are roll-up/reconcile-only and can't be `list`ed (`types list` marks listable ones
-with `*`); read those with `rollup daily <type>` instead (below).
+with `*`); read those with `rollup daily <type>` instead (below). One type —
+`daily-heart-rate-zones` — supports neither `list` nor `rollup daily`; it is reachable only via
+the `api get` escape hatch.
 
 ### Daily roll-ups (server-side totals)
 
@@ -226,7 +228,8 @@ google-health-cli api get /v4/users/me/settings
 > stdout, so the same **Privacy** caution above applies, and the broad reach makes
 > over-collection easy. It stays **GET-only** (no path can write or delete) and is
 > **constrained to the read-only v4 surface** (`/v4/...`): a non-`v4/` path, an absolute URL, or a
-> `..` traversal is rejected (exit 64) before any request is made. Still, prefer the typed
+> `..` traversal — literal or percent-encoded (`%2e%2e`, `..%2f`) — is rejected (exit 64) before
+> any request is made. Still, prefer the typed
 > `data`/`rollup`/`sessions` commands and reach for `api get` only when you need an endpoint they
 > don't model.
 
@@ -255,6 +258,7 @@ google-health-cli api get /v4/users/me/settings
 - **Read-only:** six read-only `googlehealth.*.readonly` scopes; no write operations exist.
 - **Secrets:** `config.json` and the token cache are gitignored — never commit them.
 - **Time-filter formats** are handled for you per data type (civil wall-clock, RFC3339
-  instant, or date-only). If a type rejects server-side filtering, re-run with `--all`.
+  instant, or date-only); a `--date`/`--days` window always covers your **local** calendar
+  days. If a type rejects server-side filtering, re-run with `--all`.
 
 See the repo's **AGENTS.md** for the exact `--json` shapes and exit-code contract.

@@ -86,8 +86,12 @@ Window flags (precedence: `--all` > `--from`/`--to` > `--date`/`--days`):
 | `--all` | ignore the window; list everything for the type | off |
 
 The time filter is built on the type's default time field, formatted per record family (civil wall-clock,
-RFC3339 instant, or date-only). Unknown type → exit `64`. A rollup/reconcile-only type (no `list`
-operation) → exit `64` with a message. If the API rejects the filter, re-run with `--all`.
+RFC3339 instant, or date-only). A `--date`/`--days` window always covers your **local** calendar days:
+civil/date types filter by wall-clock, and sample (`physical_time`) types convert the local midnights to
+UTC instants. Unknown type → exit `64`. A type with no `list` operation → exit `64`
+with a message naming the command that can read it (`rollup daily <type>` — or `api get` for the
+reconcile-only `daily-heart-rate-zones`, which no typed command reads). If the API rejects the filter,
+re-run with `--all`.
 
 ## `rollup daily <type>` (server-side daily totals)
 
@@ -125,7 +129,8 @@ unreconciled and double-count overlapping sources). Prefer this over re-summing 
 Window flags mirror `data list` (`--date`/`--days` default, or explicit `--from`/`--to`), minus `--all`:
 `dailyRollUp` requires a bounded range. The API caps the range per type (e.g. **90 days for `steps`**); an
 over-long window → exit `2` with the API's `…must not exceed N days` detail. Unknown type → exit `64`. A
-type that does not support `dailyRollUp` → exit `64` with a message pointing to `data list`.
+type that does not support `dailyRollUp` → exit `64` with a message naming the command that can read it
+(`data list <type>` — or `api get` for the reconcile-only `daily-heart-rate-zones`).
 
 ## `types list` / `types describe <type>`
 
@@ -174,7 +179,9 @@ order frozen:
 Authenticated GET to a read-only `/v4/` path; prints the response (re-indented if JSON). For endpoints the
 typed surface doesn't model — `users/me/profile`, `users/me/settings`, a single dataPoint by name. Only GET
 is offered, and the path is **constrained to the read-only v4 surface**: a non-`v4/` path, an absolute URL,
-or a `..` traversal is rejected with exit `64` and makes **no** request. Exit `2` on non-2xx.
+or a `..` traversal — literal or percent-encoded (`%2e%2e`, `..%2f`; the check runs on the decoded path, and
+malformed escapes or backslashes also reject) — is rejected with exit `64` and makes **no** request.
+Exit `2` on non-2xx.
 
 ```sh
 google-health-cli api get /v4/users/me/profile

@@ -41,6 +41,37 @@ func sortedKeys(m map[string]bool) string {
 	return strings.Join(keys, ",")
 }
 
+// apiGetOnlyTypes are the catalog types readable by NEITHER typed command
+// (`data list` needs the list op; `rollup daily` needs dailyRollUp) — only the
+// `api get` escape hatch reaches them. Each entry is a documented exception
+// (SKILL.md / AGENTS.md name it); the CLI's unsupported-type hints point these
+// at `api get` instead of at a typed command that would also fail.
+var apiGetOnlyTypes = map[string]bool{
+	"daily-heart-rate-zones": true, // reconcile-only upstream: no list, no dailyRollUp
+}
+
+// TestEveryTypeReachableByTypedCommandOrDocumentedException guards catalog
+// reachability: every type must be readable by `data list` or `rollup daily`,
+// or be explicitly recorded (and therefore documented) in apiGetOnlyTypes.
+// Without this, a catalog addition no documented command can read ships
+// silently — the caller only finds out from a circular error hint. The second
+// loop keeps the exception list honest: an entry that gains a typed op must be
+// removed so docs and hints follow.
+func TestEveryTypeReachableByTypedCommandOrDocumentedException(t *testing.T) {
+	for _, dt := range DataTypes() {
+		typed := dt.Supports("list") || dt.Supports("dailyRollUp")
+		if !typed && !apiGetOnlyTypes[dt.EndpointName] {
+			t.Errorf("%s (ops %v) is readable by no typed command and is not a documented api-get-only exception; "+
+				"add the op it supports, or record it in apiGetOnlyTypes AND document it in SKILL.md/AGENTS.md",
+				dt.EndpointName, dt.Operations)
+		}
+		if typed && apiGetOnlyTypes[dt.EndpointName] {
+			t.Errorf("%s is listed in apiGetOnlyTypes but supports a typed command (ops %v); remove the stale exception",
+				dt.EndpointName, dt.Operations)
+		}
+	}
+}
+
 func TestDataTypesCatalog(t *testing.T) {
 	all := DataTypes()
 	if len(all) != 31 {
