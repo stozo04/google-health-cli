@@ -67,9 +67,23 @@ func testConfig(t *testing.T, withToken bool) string {
 	return cfgPath
 }
 
-// run executes the root command with args, capturing stdout and stderr.
+// run executes the root command with args, capturing stdout and stderr. It
+// first removes every GOOGLE_HEALTH_* variable from the process environment so
+// a developer's real exports can never reach the command under test — a
+// globally set GOOGLE_HEALTH_TOKEN_CACHE, for example, would otherwise redirect
+// TestAuthLogout at the developer's real token. t.Setenv registers restoration;
+// the explicit Unsetenv makes the variable truly absent, which set-empty is not
+// (config.applyEnv honors an empty override).
 func run(t *testing.T, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
+	for _, k := range []string{
+		config.EnvConfig, config.EnvClientID, config.EnvClientSecret, config.EnvBaseURL, config.EnvTokenCache,
+	} {
+		t.Setenv(k, "")
+		if uerr := os.Unsetenv(k); uerr != nil {
+			t.Fatalf("unset %s: %v", k, uerr)
+		}
+	}
 	root := NewRootCmd()
 	var out, errBuf bytes.Buffer
 	root.SetOut(&out)
