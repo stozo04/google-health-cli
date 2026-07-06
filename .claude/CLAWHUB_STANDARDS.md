@@ -233,6 +233,13 @@ Concrete guards already in place — keep them, and add to them when you add cap
   every shipped (non-test) `.go` file and fails if any file outside the `internal/auth/oauth.go`
   allowlist imports `os/exec`, `plugin`, or `unsafe`. Its matcher is unit-tested
   (`TestGuardedImportViolationLogic`) and verified to fail when an exec import is reintroduced.
+- **No undeclared environment reads (rules 1–2, 5 / Data Exfiltration).**
+  `TestShippedSourceReadsOnlyDeclaredEnvVars` (`internal/cli/source_guards_test.go`) walks the
+  shipped (non-test) source and fails on any `os.Environ()` sweep, any `os.Getenv`/`os.LookupEnv`
+  of a name outside the five advertised `GOOGLE_HEALTH_*` keys, or an env-read argument too
+  dynamic to verify — and, on the advertisement side, fails if `SKILL.md` stops documenting a
+  declared key. Its matcher is unit-tested (`TestAllowedEnvReadLogic`) and it caught (and now
+  prevents reintroducing) a stray `LOG_LEVEL` read.
 - **No dependency redirection (Supply Chain).** `TestGoModHasNoReplaceDirectives`
   (`internal/cli/source_guards_test.go`) fails if `go.mod` carries a `replace` directive; the
   detector is unit-tested (`TestReplaceDirectiveDetection`). `go.sum` checksums are enforced by the
