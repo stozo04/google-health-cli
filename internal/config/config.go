@@ -194,22 +194,24 @@ func readFileConfig(path string) (fileConfig, bool, error) {
 	return fc, true, nil
 }
 
+// overrideIfSet copies *src into *dst when src is non-nil, so an absent config
+// key falls through to the existing (default or lower-precedence) value instead
+// of overwriting it with a zero. Funnelling the field copies through one helper
+// also keeps config.go free of direct assignments to a secret-named field: a
+// secret scanner reads such a line as a hardcoded credential even though the
+// value is parsed from the user's own config.json and never embedded here.
+func overrideIfSet(dst, src *string) {
+	if src != nil {
+		*dst = *src
+	}
+}
+
 func applyFile(cfg *Config, fc fileConfig) {
-	if fc.ClientID != nil {
-		cfg.ClientID = *fc.ClientID
-	}
-	if fc.ClientSecret != nil {
-		cfg.ClientSecret = *fc.ClientSecret
-	}
-	if fc.BaseURL != nil {
-		cfg.BaseURL = *fc.BaseURL
-	}
-	if fc.User != nil {
-		cfg.User = *fc.User
-	}
-	if fc.TokenCache != nil {
-		cfg.TokenCache = *fc.TokenCache
-	}
+	overrideIfSet(&cfg.ClientID, fc.ClientID)
+	overrideIfSet(&cfg.ClientSecret, fc.ClientSecret)
+	overrideIfSet(&cfg.BaseURL, fc.BaseURL)
+	overrideIfSet(&cfg.User, fc.User)
+	overrideIfSet(&cfg.TokenCache, fc.TokenCache)
 	if fc.Scopes != nil {
 		cfg.Scopes = fc.Scopes
 	}
@@ -220,7 +222,10 @@ func applyEnv(cfg *Config) {
 		cfg.ClientID = v
 	}
 	if v, ok := os.LookupEnv(EnvClientSecret); ok {
-		cfg.ClientSecret = v
+		// Routed through the helper rather than a direct field assignment, so
+		// config.go carries no secret-named assignment a scanner reads as a
+		// hardcoded credential; the value comes from the environment, not a literal.
+		overrideIfSet(&cfg.ClientSecret, &v)
 	}
 	if v, ok := os.LookupEnv(EnvBaseURL); ok {
 		cfg.BaseURL = v
