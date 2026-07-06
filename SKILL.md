@@ -257,6 +257,7 @@ google-health-cli api get /v4/users/me/settings
 - **Read-only:** six read-only `googlehealth.*.readonly` scopes; no write operations exist.
 - **Secrets:** `config.json` and the token cache are gitignored — never commit them.
 - **Time-filter formats** are handled for you per data type (civil wall-clock, RFC3339
-  instant, or date-only). If a type rejects server-side filtering, re-run with `--all`.
+  instant, or date-only); a `--date`/`--days` window always covers your **local** calendar
+  days. If a type rejects server-side filtering, re-run with `--all`.
 
 See the repo's **AGENTS.md** for the exact `--json` shapes and exit-code contract.

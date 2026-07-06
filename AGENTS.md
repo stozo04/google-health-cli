@@ -86,7 +86,9 @@ Window flags (precedence: `--all` > `--from`/`--to` > `--date`/`--days`):
 | `--all` | ignore the window; list everything for the type | off |
 
 The time filter is built on the type's default time field, formatted per record family (civil wall-clock,
-RFC3339 instant, or date-only). Unknown type → exit `64`. A type with no `list` operation → exit `64`
+RFC3339 instant, or date-only). A `--date`/`--days` window always covers your **local** calendar days:
+civil/date types filter by wall-clock, and sample (`physical_time`) types convert the local midnights to
+UTC instants. Unknown type → exit `64`. A type with no `list` operation → exit `64`
 with a message naming the command that can read it (`rollup daily <type>` — or `api get` for the
 reconcile-only `daily-heart-rate-zones`, which no typed command reads). If the API rejects the filter,
 re-run with `--all`.
