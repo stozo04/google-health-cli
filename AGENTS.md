@@ -86,8 +86,10 @@ Window flags (precedence: `--all` > `--from`/`--to` > `--date`/`--days`):
 | `--all` | ignore the window; list everything for the type | off |
 
 The time filter is built on the type's default time field, formatted per record family (civil wall-clock,
-RFC3339 instant, or date-only). Unknown type → exit `64`. A rollup/reconcile-only type (no `list`
-operation) → exit `64` with a message. If the API rejects the filter, re-run with `--all`.
+RFC3339 instant, or date-only). Unknown type → exit `64`. A type with no `list` operation → exit `64`
+with a message naming the command that can read it (`rollup daily <type>` — or `api get` for the
+reconcile-only `daily-heart-rate-zones`, which no typed command reads). If the API rejects the filter,
+re-run with `--all`.
 
 ## `rollup daily <type>` (server-side daily totals)
 
@@ -125,7 +127,8 @@ unreconciled and double-count overlapping sources). Prefer this over re-summing 
 Window flags mirror `data list` (`--date`/`--days` default, or explicit `--from`/`--to`), minus `--all`:
 `dailyRollUp` requires a bounded range. The API caps the range per type (e.g. **90 days for `steps`**); an
 over-long window → exit `2` with the API's `…must not exceed N days` detail. Unknown type → exit `64`. A
-type that does not support `dailyRollUp` → exit `64` with a message pointing to `data list`.
+type that does not support `dailyRollUp` → exit `64` with a message naming the command that can read it
+(`data list <type>` — or `api get` for the reconcile-only `daily-heart-rate-zones`).
 
 ## `types list` / `types describe <type>`
 

@@ -169,7 +169,9 @@ Example (`data list daily-resting-heart-rate`):
 ```
 
 A few types are roll-up/reconcile-only and can't be `list`ed (`types list` marks listable ones
-with `*`); read those with `rollup daily <type>` instead (below).
+with `*`); read those with `rollup daily <type>` instead (below). One type —
+`daily-heart-rate-zones` — supports neither `list` nor `rollup daily`; it is reachable only via
+the `api get` escape hatch.
 
 ### Daily roll-ups (server-side totals)
 

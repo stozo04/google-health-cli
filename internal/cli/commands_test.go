@@ -158,6 +158,66 @@ func TestDataListUnknownTypeIsUsageError(t *testing.T) {
 	}
 }
 
+// TestDataListRollupOnlyTypeHintsRollup: rejecting a non-listable type must
+// point the caller at the command that can actually read it. active-minutes
+// supports dailyRollUp, so the hint must name `rollup daily active-minutes`.
+func TestDataListRollupOnlyTypeHintsRollup(t *testing.T) {
+	cfg := testConfig(t, true)
+	_, _, err := run(t, "--config", cfg, "data", "list", "active-minutes")
+	var exit *ExitError
+	if !errors.As(err, &exit) || exit.Code != ExitUsage {
+		t.Fatalf("err = %v, want ExitError code %d", err, ExitUsage)
+	}
+	if !strings.Contains(err.Error(), "rollup daily active-minutes") {
+		t.Errorf("hint does not name the working command `rollup daily active-minutes`: %v", err)
+	}
+}
+
+// TestDataListReconcileOnlyTypeHintsAPIGet: daily-heart-rate-zones supports only
+// reconcile — neither data list nor rollup daily can read it — so the hint must
+// point at `api get`, and must NOT suggest a rollup command that would also fail.
+func TestDataListReconcileOnlyTypeHintsAPIGet(t *testing.T) {
+	cfg := testConfig(t, true)
+	_, _, err := run(t, "--config", cfg, "data", "list", "daily-heart-rate-zones")
+	var exit *ExitError
+	if !errors.As(err, &exit) || exit.Code != ExitUsage {
+		t.Fatalf("err = %v, want ExitError code %d", err, ExitUsage)
+	}
+	if !strings.Contains(err.Error(), "api get") {
+		t.Errorf("hint does not name `api get` for a reconcile-only type: %v", err)
+	}
+	if strings.Contains(err.Error(), "rollup daily daily-heart-rate-zones") {
+		t.Errorf("hint suggests `rollup daily daily-heart-rate-zones`, which also fails: %v", err)
+	}
+}
+
+// TestRollupDailyHintNamesAReadPathThatWorks: the rollup rejection must derive
+// its hint from the type's actual operations — `data list` for a listable type,
+// `api get` for the reconcile-only type — never a static suggestion that fails.
+func TestRollupDailyHintNamesAReadPathThatWorks(t *testing.T) {
+	cfg := testConfig(t, true)
+
+	_, _, err := run(t, "--config", cfg, "rollup", "daily", "exercise")
+	var exit *ExitError
+	if !errors.As(err, &exit) || exit.Code != ExitUsage {
+		t.Fatalf("exercise: err = %v, want ExitError code %d", err, ExitUsage)
+	}
+	if !strings.Contains(err.Error(), "data list exercise") {
+		t.Errorf("exercise hint does not name `data list exercise`: %v", err)
+	}
+
+	_, _, err = run(t, "--config", cfg, "rollup", "daily", "daily-heart-rate-zones")
+	if !errors.As(err, &exit) || exit.Code != ExitUsage {
+		t.Fatalf("daily-heart-rate-zones: err = %v, want ExitError code %d", err, ExitUsage)
+	}
+	if !strings.Contains(err.Error(), "api get") {
+		t.Errorf("daily-heart-rate-zones hint does not name `api get`: %v", err)
+	}
+	if strings.Contains(err.Error(), "data list daily-heart-rate-zones") {
+		t.Errorf("hint suggests `data list daily-heart-rate-zones`, which also fails: %v", err)
+	}
+}
+
 // TestAPIGetRejectsNonV4PathAsUsageError guards that the `api get` escape hatch's
 // path validation surfaces as a usage error (exit 64), not an auth/API failure,
 // and (implicitly) that a non-v4 path never reaches the network. Pairs with
