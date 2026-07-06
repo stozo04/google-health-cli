@@ -71,8 +71,8 @@ guard the moment a change makes that category exploitable.
   context. → rules 3–4.
 - **Tool Misuse** (parameter abuse, chaining abuse, unsafe defaults) — defaults are safe:
   `api get` is GET-only (no path can write/delete) **and** constrained to the read-only `/v4/`
-  surface (no absolute-URL/host smuggling, no `..` traversal), window flags default to a bounded
-  range, secrets default to `0600`. → rule 1; CLI_CONVENTIONS §3.
+  surface (no absolute-URL/host smuggling, no `..` traversal — literal or percent-encoded), window
+  flags default to a bounded range, secrets default to `0600`. → rule 1; CLI_CONVENTIONS §3.
 - **Rogue Agent** (self-modification, session persistence) — the binary never rewrites itself or
   installs background persistence; the only persisted state is the declared token cache. → rule 2;
   CLI_CONVENTIONS §1–2.
@@ -182,7 +182,8 @@ guard the moment a change makes that category exploitable.
 - [ ] Every command that prints health data emits an execution-time privacy notice to stderr
       (runtime warning, not just docs) — and never on stdout.
 - [ ] Any generic escape hatch (e.g. `api get`) is constrained to its advertised surface (read-only
-      `/v4/` paths; no absolute-URL/host smuggling or `..` traversal), with no network call on reject.
+      `/v4/` paths; no absolute-URL/host smuggling or `..` traversal, literal **or** percent-encoded),
+      with no network call on reject.
 - [ ] No hidden instructions, deceptive Unicode, or injection text in descriptions/examples.
 - [ ] Network egress and file access match the declared `permissions` block exactly.
 - [ ] No absolute paths, home dirs, usernames, or machine-local locations in tracked docs/comments/examples.
@@ -219,7 +220,10 @@ Concrete guards already in place — keep them, and add to them when you add cap
 - **Escape-hatch reach == advertised reach (rule 1).** `api get` is constrained to the read-only
   `/v4/` surface by `validateRawPath` in `internal/api/client.go`; a non-`v4/` path, an absolute
   URL/authority, or a `..` traversal returns `ErrPathNotAllowed` (mapped to exit 64 by the CLI) and
-  makes **no** network call. `TestRawGet_RejectsPathsOutsideV4Surface`
+  makes **no** network call. The traversal check runs on the **percent-decoded** path portion, so
+  encoded forms (`%2e%2e`, `..%2f`) are caught too, and a malformed escape or a backslash rejects
+  outright — a raw string comparison alone would wave `v4/%2e%2e/x` through to a server that
+  normalizes after decoding. `TestRawGet_RejectsPathsOutsideV4Surface`
   (`internal/api/client_test.go`) and `TestAPIGetRejectsNonV4PathAsUsageError`
   (`internal/cli/commands_test.go`) pin both the rejection and the no-network guarantee. **Fix a
   failure by tightening `validateRawPath`, never by loosening the test.**

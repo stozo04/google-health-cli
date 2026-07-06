@@ -224,7 +224,7 @@ func TestRollupDailyHintNamesAReadPathThatWorks(t *testing.T) {
 // api.TestRawGet_RejectsPathsOutsideV4Surface, which proves the no-network claim.
 func TestAPIGetRejectsNonV4PathAsUsageError(t *testing.T) {
 	cfg := testConfig(t, true) // valid token, so we get past auth to path validation
-	for _, path := range []string{"/v3/users/me", "http://evil.example/v4/x", "/admin"} {
+	for _, path := range []string{"/v3/users/me", "http://evil.example/v4/x", "/admin", "/v4/%2e%2e/secret"} {
 		_, _, err := run(t, "--config", cfg, "api", "get", path)
 		var exit *ExitError
 		if !errors.As(err, &exit) || exit.Code != ExitUsage {

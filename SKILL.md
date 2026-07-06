@@ -228,7 +228,8 @@ google-health-cli api get /v4/users/me/settings
 > stdout, so the same **Privacy** caution above applies, and the broad reach makes
 > over-collection easy. It stays **GET-only** (no path can write or delete) and is
 > **constrained to the read-only v4 surface** (`/v4/...`): a non-`v4/` path, an absolute URL, or a
-> `..` traversal is rejected (exit 64) before any request is made. Still, prefer the typed
+> `..` traversal — literal or percent-encoded (`%2e%2e`, `..%2f`) — is rejected (exit 64) before
+> any request is made. Still, prefer the typed
 > `data`/`rollup`/`sessions` commands and reach for `api get` only when you need an endpoint they
 > don't model.
 

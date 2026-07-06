@@ -179,7 +179,9 @@ order frozen:
 Authenticated GET to a read-only `/v4/` path; prints the response (re-indented if JSON). For endpoints the
 typed surface doesn't model — `users/me/profile`, `users/me/settings`, a single dataPoint by name. Only GET
 is offered, and the path is **constrained to the read-only v4 surface**: a non-`v4/` path, an absolute URL,
-or a `..` traversal is rejected with exit `64` and makes **no** request. Exit `2` on non-2xx.
+or a `..` traversal — literal or percent-encoded (`%2e%2e`, `..%2f`; the check runs on the decoded path, and
+malformed escapes or backslashes also reject) — is rejected with exit `64` and makes **no** request.
+Exit `2` on non-2xx.
 
 ```sh
 google-health-cli api get /v4/users/me/profile

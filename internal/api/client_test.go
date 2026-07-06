@@ -102,7 +102,9 @@ func TestListDataPoints_ErrorEnvelope(t *testing.T) {
 // TestRawGet_RejectsPathsOutsideV4Surface is the immutable guard for the
 // description/behavior-mismatch finding: `api get` advertises a read-only v4 GET,
 // so RawGet must reject anything outside the v4 surface — non-v4 paths, absolute
-// URLs, "//authority" smuggling, and ".." traversal — and crucially must make NO
+// URLs, "//authority" smuggling, and ".." traversal in BOTH literal and
+// percent-encoded form (%2e is '.', %2f is '/', so "v4/%2e%2e/x" is "v4/../x" to
+// any server that normalizes after decoding) — and crucially must make NO
 // network call when it does. A real v4 path still reaches the server. Fix a
 // failure by tightening validateRawPath, never by loosening this test.
 func TestRawGet_RejectsPathsOutsideV4Surface(t *testing.T) {
@@ -126,6 +128,11 @@ func TestRawGet_RejectsPathsOutsideV4Surface(t *testing.T) {
 		"//evil.example/v4/users/me",      // protocol-relative authority
 		"v4/../../admin",                  // parent traversal out of v4
 		"/v4/users/../../secret",          // traversal mid-path
+		"v4/%2e%2e/admin",                 // percent-encoded ".." (%2e = '.')
+		"v4/%2E%2E/other",                 // uppercase hex form of the same
+		"v4/..%2fadmin",                   // encoded '/' gluing ".." into one raw segment
+		"v4/%2e%2e%5cadmin",               // encoded "..\" — backslash is a separator on some stacks
+		"v4/%zz/profile",                  // malformed escape — unverifiable, must reject
 	}
 	for _, p := range rejected {
 		_, err := c.RawGet(context.Background(), p)
