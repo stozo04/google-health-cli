@@ -48,6 +48,10 @@ archives:
       - README.md
       - OAUTH_SETUP.md
       - AGENTS.md
+      - CLAUDE.md
+      - docs/*.md
+      - .claude/CLI_CONVENTIONS.md
+      - .claude/CLAWHUB_STANDARDS.md
       - SKILL.md
       - LICENSE
 
