@@ -81,7 +81,7 @@ func TestSkillDocWarnsAboutSensitiveOutput(t *testing.T) {
 // deleting the test.
 func TestAgentsDocWarnsAboutPrivacyAndConsent(t *testing.T) {
 	root := repoRoot(t)
-	raw, err := os.ReadFile(filepath.Join(root, "AGENTS.md"))
+	raw, err := os.ReadFile(filepath.Join(root, "docs", "MACHINE_CONTRACT.md"))
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
 	}

@@ -19,6 +19,9 @@ jobs:
           go-version: "1.25"
           check-latest: true
 
+      - name: Check agent instructions
+        run: make check-agents
+
       - name: Build
         run: go build ./...
 

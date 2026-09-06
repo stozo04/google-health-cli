@@ -1,9 +1,8 @@
 # ClawHub Standards
 
 Standards for any skill in this repo that is published to and inspected by **ClawHub**.
-This file is **tracked in git** (unlike `CLAUDE.md`, which is local-only) so the rules are
-shared across machines, collaborators, and CI. It is loaded into Claude Code via an `@import`
-from `CLAUDE.md` — treat it as **required reading before changing skill metadata, scopes,
+This file is **tracked in git** and shared across machines, collaborators, and CI.
+Every agent loads it through `docs/PROJECT_INSTRUCTIONS.md` — treat it as **required reading before changing skill metadata, scopes,
 permissions, docs, or the data-type catalog**.
 
 The governing principle: **what the skill *advertises* must equal what it *does*.** ClawHub
@@ -57,7 +56,7 @@ guard the moment a change makes that category exploitable.
 - **Output Handling / Missing User Warnings** (unvalidated output injection, cross-context output,
   unbounded output; sensitive data emitted without a caller warning) — stdout is the API's raw JSON
   bytes, verbatim; the **Privacy / data-minimization / consent** callouts (in both `SKILL.md` and
-  `AGENTS.md`) warn that this output crosses into agent/log/pipeline contexts, tell the caller to
+  `docs/MACHINE_CONTRACT.md`) warn that this output crosses into agent/log/pipeline contexts, tell the caller to
   request the narrowest data and obtain owner consent, and flag the OAuth secrets + token as
   sensitive plaintext on disk; counts/hints go to stderr. On top of the docs, every data-emitting
   command prints an **execution-time privacy notice to stderr** (guarded by
@@ -135,8 +134,8 @@ guard the moment a change makes that category exploitable.
      (and to rotate / `auth logout` on a suspected leak). Encouraging plaintext secret storage
      *without* this warning is itself a ClawHub "Missing User Warnings" finding.
 
-   These warnings must appear in **both** the human `SKILL.md` **and** the `AGENTS.md` machine
-   contract (a ClawHub reviewer reads `AGENTS.md` as "the contract"), and each is pinned by a guard
+   These warnings must appear in **both** the human `SKILL.md` **and** the `docs/MACHINE_CONTRACT.md` machine
+   contract (a ClawHub reviewer reads `docs/MACHINE_CONTRACT.md` as "the contract"), and each is pinned by a guard
    (see "How this repo enforces the rules"). Docs alone are **not sufficient** for the data-emitting
    commands: in an agent setting stdout is often auto-captured and forwarded, so each command that
    prints health data must **also emit an execution-time privacy notice to stderr** (a runtime
@@ -175,7 +174,7 @@ guard the moment a change makes that category exploitable.
 - [ ] Metadata lists only operations/scopes/permissions the code actually exercises.
 - [ ] No mutating op appears anywhere a read-only tool's metadata is generated or embedded.
 - [ ] Every sensitive-output command is covered by a privacy warning in **both** `SKILL.md` and
-      `AGENTS.md` — including diagnostics that emit *local environment metadata* (paths, account,
+      `docs/MACHINE_CONTRACT.md` — including diagnostics that emit *local environment metadata* (paths, account,
       base URL).
 - [ ] The privacy warning also gives data-minimization guidance, operator-consent expectations,
       and a credential-protection warning (OAuth secrets + token are sensitive plaintext on disk).
@@ -207,7 +206,7 @@ Concrete guards already in place — keep them, and add to them when you add cap
   health PII that may be logged/transmitted/persisted), the `api get` sensitive-endpoint
   warning, the `doctor` local-environment-metadata warning (token/config paths, account, base
   URL), the data-minimization & operator-consent callout, and the "Protect your credentials"
-  plaintext-secrets warning. `AGENTS.md` (the machine contract) carries the same set in its
+  plaintext-secrets warning. `docs/MACHINE_CONTRACT.md` (the machine contract) carries the same set in its
   "Privacy, data minimization & consent" section. `TestSkillDocWarnsAboutSensitiveOutput` and
   `TestAgentsDocWarnsAboutPrivacyAndConsent` (`internal/cli/skill_doc_test.go`) fail if any of
   these warnings is removed or weakened in either doc. **Fix by keeping the warning, never by

@@ -88,7 +88,7 @@ Notes:
 - A few types are **rollup/reconcile-only** and cannot be listed (e.g. `total-calories`,
   `time-in-heart-rate-zone`). `data list` rejects them with a clear message; `types list` marks the
   listable ones with `*`. Read them with **`rollup daily <type>`** instead.
-- If a type rejects server-side filtering, re-run with `--all` and filter client-side.
+- If a type rejects server-side filtering, diagnose the filter first; use `--all` only when the task authorizes an unbounded read.
 - **`rollup daily <type>`** returns one server-reconciled value per civil day (a `dailyRollUp` query) —
   the cheap way to get daily totals and the only way to reach the rollup-only types. The value is
   reconciled across data sources, so it is *not* a naive sum of `data list` points.
