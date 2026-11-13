@@ -41,7 +41,10 @@ guard the moment a change makes that category exploitable.
   config/token paths. → rules 2, 5.
 - **Privilege Escalation** (excessive permissions, sudo/root execution, credential access) — six
   read-only scopes (least privilege); never elevates or runs as root; touches only its own `0600`
-  token cache. → rules 1–2; CLI_CONVENTIONS §3.
+  token cache. SkillSpector's PE3 rule also matches the prose `access token` / `access the
+  credentials` in any shipped file, Go comments included, and reports it as High "Credential
+  Access", so shipped files say "OAuth token". → rules 1–2; CLI_CONVENTIONS §3; guarded by
+  `TestClawhubPackageAvoidsCredentialAccessProse`.
 - **Supply Chain** (unpinned dependencies, external script fetching, obfuscated code) — Go modules
   pin every dependency by version **and** checksum (`go.sum`, enforced by the toolchain on every
   CI build); nothing fetches remote scripts/code at build or run; no obfuscated/minified code.
@@ -94,7 +97,13 @@ guard the moment a change makes that category exploitable.
   the repo ships a single self-contained client.
 - **MCP Least Privilege** (underdeclared capability, wildcard permission, missing permission
   declaration) — the `metadata.openclaw.permissions` block lists the exact network hosts and the
-  exact files read/written — no wildcards, nothing omitted. → rule 2.
+  exact files read/written — no wildcards, nothing omitted. The `env` permission also names the
+  per-user directory variables (`HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `AppData`,
+  `LocalAppData`) that `os.UserConfigDir` / `os.UserCacheDir` read to find the default paths.
+  SkillSpector's over-declared check (LP4) detects capabilities with Python/JS regexes
+  (`os.getenv`, `os.environ`, `open(...'r')`, `.read_text(`), so it misses Go's `os.LookupEnv`,
+  `os.ReadFile` and `os.Open` and reports the `env` and `file_read` declarations as unused. Both
+  are real reads: keep the declarations and don't reshape Go code to match the scanner. → rule 2.
 - **MCP Tool Poisoning** (hidden instructions, Unicode deception, parameter-description injection)
   — no hidden instructions, no invisible/look-alike Unicode, no injection text in any description
   or example. → rule 4.

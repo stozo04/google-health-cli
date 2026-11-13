@@ -123,7 +123,7 @@ func newAuthStatusCmd(app *App) *cobra.Command {
 			report := authStatusReport{TokenPath: cfg.TokenCache}
 			if tok != nil {
 				report.Present = true
-				report.Valid = tok.Valid() // non-empty access token AND not expired.
+				report.Valid = tok.Valid()
 				if !tok.Expiry.IsZero() {
 					report.Expiry = tok.Expiry.UTC().Format(time.RFC3339)
 				}

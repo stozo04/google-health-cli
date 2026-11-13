@@ -236,7 +236,7 @@ func DeleteToken(path string) error {
 // persistingSource wraps a refreshing TokenSource and re-saves the token to disk
 // whenever .Token() yields a newer one (an access-token rotation after a
 // refresh). x/oauth2 handles refresh-token rotation internally; we only need to
-// persist the result so the on-disk access token stays fresh between runs
+// persist the result so the on-disk OAuth token stays fresh between runs
 // (GOAL.md §8 — ghealth doesn't do this; we should).
 type persistingSource struct {
 	base               oauth2.TokenSource
@@ -261,7 +261,7 @@ func (p *persistingSource) Token() (*oauth2.Token, error) {
 }
 
 // changed reports whether tok differs from the last persisted token in a way
-// worth writing (a new access token or a new expiry).
+// worth writing (a new bearer value or a new expiry).
 func (p *persistingSource) changed(tok *oauth2.Token) bool {
 	if p.last == nil {
 		return true
