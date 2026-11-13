@@ -36,8 +36,9 @@ else's behalf, obtain that consent first and honor its limits.
 
 **Credentials are sensitive secrets, stored locally in plaintext.** The OAuth `client_id` /
 `client_secret` (in `config.json` or the `GOOGLE_HEALTH_*` env vars) and the cached OAuth **token**
-(`token.json`) are credentials written to disk **unencrypted**. They are created `0600` (owner-only)
-and the secret files are gitignored — **keep them that way**: never commit them, never copy them into
+(`token.json`) are credentials stored on disk **unencrypted**. The CLI creates the token cache `0600`
+(owner-only); it never creates `config.json`, so the user must restrict it (`chmod 600 config.json`).
+The secret files are gitignored — **keep them that way**: never commit them, never copy them into
 a shared directory, backup, log, or chat, and rotate the OAuth client (run `auth logout`) if one may
 have leaked.
 

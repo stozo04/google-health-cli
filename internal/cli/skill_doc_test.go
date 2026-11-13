@@ -107,3 +107,27 @@ func TestAgentsDocWarnsAboutPrivacyAndConsent(t *testing.T) {
 		}
 	}
 }
+
+func TestOAuthSetupDocWarnsAboutCredentialsAndUnverifiedApp(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "OAUTH_SETUP.md"))
+	if err != nil {
+		t.Fatalf("read OAUTH_SETUP.md: %v", err)
+	}
+	setup := string(raw)
+
+	required := []struct {
+		why    string
+		marker string
+	}{
+		{"warns the credentials are secrets to protect", "Protect your credentials"},
+		{"notes the credentials are stored in plaintext", "sensitive secrets stored on disk in plaintext"},
+		{"tells the user to keep secrets out of commits", "Never commit them"},
+		{"gives leak remediation", "auth logout"},
+		{"limits the unverified-app bypass to the user's own client", "Only click through this warning for an OAuth client you created yourself"},
+	}
+	for _, r := range required {
+		if !strings.Contains(setup, r.marker) {
+			t.Errorf("OAUTH_SETUP.md missing required warning (%s): %q not found", r.why, r.marker)
+		}
+	}
+}

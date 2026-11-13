@@ -7,10 +7,13 @@ description: >
   (one reconciled total per day), gives a parsed view of exercise sessions, and can
   GET any read-only v4 API path. A self-contained, read-only
   client for the Google Health v4 API: authenticates via OAuth2 (token cached
-  locally and auto-refreshed) and emits JSON. It does NO filtering, merging, or
-  writing — the caller decides what to do with the data. Single static binary, no
-  Python or other runtime. NOTE: needs your own Google Cloud OAuth client and a
-  one-time interactive browser login; runs headless afterward.
+  locally and auto-refreshed) and emits JSON. It does NO filtering or merging and
+  never writes to Google Health; the only file it writes is its own local OAuth
+  token cache. The caller decides what to do with the data. Also ships the setup
+  and housekeeping commands a CLI needs: auth login/logout/status, doctor (local
+  setup diagnostics), config show/path, version, and shell completion. Single
+  static binary, no Python or other runtime. NOTE: needs your own Google Cloud
+  OAuth client and a one-time interactive browser login; runs headless afterward.
 metadata:
   openclaw:
     emoji: 🩺
@@ -24,7 +27,7 @@ metadata:
         - "config.json — OAuth client id/secret and optional settings; discovered via --config, then $GOOGLE_HEALTH_CONFIG, then ./config.json, then next to the executable, then <user config dir>/google-health-cli/config.json"
         - "token cache — the cached OAuth token (default <user cache dir>/google-health-cli/token.json, a non-roaming location; overridable via GOOGLE_HEALTH_TOKEN_CACHE; a token left at the older <user config dir> path is migrated forward automatically)"
       files.write:
-        - "token cache — written at login and re-written when the token auto-refreshes (no other files are written)"
+        - "token cache — written at login, re-written when the token auto-refreshes, and deleted on `auth logout`; a legacy token at the older <user config dir> path is removed after it is migrated forward (no other files are written or deleted)"
     requires:
       bins: []
       env:
@@ -56,7 +59,8 @@ prints **JSON**. It does no filtering, merging, or interpretation — you get th
 parse whatever you care about. Single static binary — **no Python or other runtime**.
 
 > ⚠️ **Read-only.** It requests only read-only Google Health scopes and never writes your
-> health data.
+> health data. Locally, it writes only its own OAuth token cache (at `auth login` and on
+> auto-refresh) and deletes it on `auth logout`.
 
 > 🔒 **Privacy — sensitive health data leaves on stdout.** Every `data list`, `rollup daily`,
 > `sessions`, and `api get` prints your **personal health information** (heart rate, sleep, weight,
@@ -127,8 +131,9 @@ human in a browser **once**. After that it runs headless (the token auto-refresh
 ```
 
 > 🔑 **Protect your credentials.** The OAuth `client_id`/`client_secret` and the cached **token**
-> are sensitive secrets stored on disk in plaintext (`config.json` / `token.json`, written `0600`).
-> They're gitignored — keep it that way: never commit them, copy them into a shared folder, back them
+> are sensitive secrets stored on disk in plaintext. The CLI writes `token.json` owner-only (`0600`);
+> it never creates `config.json`, so restrict that file yourself (`chmod 600 config.json`).
+> Both are gitignored — keep it that way: never commit them, copy them into a shared folder, back them
 > up to an untrusted location, or paste them into logs or chat. Rotate the OAuth client (and run
 > `auth logout`) if one may have leaked.
 
@@ -261,4 +266,4 @@ google-health-cli api get /v4/users/me/settings
   instant, or date-only); a `--date`/`--days` window always covers your **local** calendar
   days. If a type rejects server-side filtering, diagnose the filter first. Use `--all` only when the requested scope authorizes an unbounded read.
 
-See the repo's **AGENTS.md** for the exact `--json` shapes and exit-code contract.
+See the repo's **docs/MACHINE_CONTRACT.md** for the exact `--json` shapes and exit-code contract.
