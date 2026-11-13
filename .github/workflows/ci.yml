@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-test:
@@ -54,3 +54,28 @@ jobs:
           # Build golangci-lint from source with the runner's Go (1.26), so the
           # linter's toolchain always matches the module's go directive.
           install-mode: goinstall
+
+  clawhub-package:
+    name: clawhub package contents
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: Check what clawhub would publish
+        run: make check-clawhub
+
+  agent-skills-spec:
+    name: agent skills spec
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate every skill copy with the upstream skills-ref (tracks spec updates)
+        run: |
+          for harness in .claude .codex .cursor; do
+            pipx run --spec "git+https://github.com/agentskills/agentskills#subdirectory=skills-ref" \
+              skills-ref validate "$harness/skills/google-health-cli"
+          done

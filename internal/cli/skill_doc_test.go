@@ -142,16 +142,20 @@ func TestSkillDocDeclaresToolScopeAndConfigBoundary(t *testing.T) {
 	if !ok {
 		t.Fatal("SKILL.md has no frontmatter block")
 	}
+	if strings.Contains(frontmatter, "\npermissions:\n") {
+		t.Error("SKILL.md frontmatter has a top-level permissions field, which the Agent Skills spec rejects; declare scope under metadata.openclaw.permissions")
+	}
 	for _, declared := range []string{
-		"\npermissions:\n",
-		`"network: HTTPS to accounts.google.com, oauth2.googleapis.com and health.googleapis.com only, plus a one-time 127.0.0.1 listener for the auth login callback"`,
-		`"file_read: config.json, the OAuth token cache, and a legacy token cache at the older <user config dir> path when migrating it"`,
-		`"file_write: the OAuth token cache only; it is deleted on auth logout, and a legacy token cache is deleted once it has been migrated; any other existing file is never overwritten or deleted"`,
-		`"env: the five GOOGLE_HEALTH_* variables listed under envVars, plus the per-user directory variables that Go's os.UserConfigDir and os.UserCacheDir consult to locate the default config and token paths (HOME, XDG_CONFIG_HOME and XDG_CACHE_HOME on Linux; HOME on macOS; AppData and LocalAppData on Windows)"`,
-		`"shell: launches the system browser once during auth login`,
+		"\n    permissions:\n      network:\n",
+		"\n      files.read:\n",
+		"\n      files.write:\n",
+		"\n      env:\n        - \"The five GOOGLE_HEALTH_* variables listed under envVars\"\n",
+		"os.UserConfigDir and os.UserCacheDir consult to locate the default config and token paths (HOME, XDG_CONFIG_HOME and XDG_CACHE_HOME on Linux; HOME on macOS; AppData and LocalAppData on Windows)",
+		"\n      process:\n        - \"Launches the system browser once during auth login",
+		"module: github.com/stozo04/google-health-cli/cmd/google-health-cli@latest",
 	} {
 		if !strings.Contains(frontmatter, declared) {
-			t.Errorf("SKILL.md frontmatter must declare its tool scope: %q not found", declared)
+			t.Errorf("SKILL.md metadata.openclaw must declare its tool scope and install: %q not found", declared)
 		}
 	}
 	for _, marker := range []string{

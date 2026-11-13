@@ -12,7 +12,7 @@ CLI surface / JSON contract (see `AGENTS.md`), **minor** for new commands or dat
 ## Before you release
 
 - The change is merged to `main` and **CI is green** on `main`.
-- Locally: `make check` passes (tidy, fmt, vet, lint, race tests).
+- Locally: `make check` passes (skill mirrors, ClawHub package, tidy, fmt, vet, lint, race tests).
 - You've decided the version bump (major/minor/patch).
 
 ## How to release
