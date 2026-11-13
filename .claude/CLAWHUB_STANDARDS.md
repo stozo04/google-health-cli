@@ -257,6 +257,23 @@ Concrete guards already in place — keep them, and add to them when you add cap
   plaintext-secrets warning and limits the "unverified app" bypass to an OAuth client the user
   created. `TestOAuthSetupDocWarnsAboutCredentialsAndUnverifiedApp`
   (`internal/cli/skill_doc_test.go`) fails if either is removed.
+- **Config can't redirect the token or widen scopes (Insecure Coding / Excessive Agency).** A
+  `config.json` is discovered from the working directory, so its contents are untrusted input.
+  `config.Load` rejects any effective `base_url` other than `https://health.googleapis.com`
+  (`ErrBaseURLNotAllowed`) and any `scopes` entry outside `DefaultScopes`, or an empty list
+  (`ErrScopeNotAllowed`); the CLI maps both to exit 78 before any request.
+  `TestBaseURLMustBeGoogleHealthOrigin`, `TestScopesMustBeReadOnlyGoogleHealthScopes`
+  (`internal/config/config_test.go`) and `TestWorkspaceConfigCannotRedirectToken`
+  (`internal/cli/commands_test.go`, which asserts a hostile server receives zero requests) pin it.
+  Tests reach a local server only through the in-package `baseURLOverride` hook, never config.
+- **No silent omissions (Excessive Agency).** `sessions` counts exercise points it can't date and
+  reports them on stderr with a pointer to `--raw`. Guard: `TestBuildSessionRowsCountsPointsWithoutStart`
+  and `TestReportUnparsedSessionsWarnsOnStderrOnly` (`internal/cli/sessions_test.go`).
+- **Declared tool scope (MCP Least Privilege).** SkillSpector reads a top-level `permissions` list
+  in the `SKILL.md` frontmatter, not `metadata.openclaw.permissions`, and maps each entry to a
+  capability by its first keyword (`network`, `file_read`, `file_write`, `env`, `shell`). Keep one
+  entry per real capability, worded so no earlier keyword matches first. Guard:
+  `TestSkillDocDeclaresToolScopeAndConfigBoundary` (`internal/cli/skill_doc_test.go`).
 - **No dependency redirection (Supply Chain).** `TestGoModHasNoReplaceDirectives`
   (`internal/cli/source_guards_test.go`) fails if `go.mod` carries a `replace` directive; the
   detector is unit-tested (`TestReplaceDirectiveDetection`). `go.sum` checksums are enforced by the

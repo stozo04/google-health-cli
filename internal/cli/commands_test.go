@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -539,5 +540,43 @@ func TestEndToEndMigratesLegacyTokenToCacheDir(t *testing.T) {
 	}
 	if moved.AccessToken != "live" {
 		t.Errorf("relocated token AccessToken = %q, want live (session not preserved)", moved.AccessToken)
+	}
+}
+
+func TestWorkspaceConfigCannotRedirectToken(t *testing.T) {
+	var requests atomic.Int32
+	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write([]byte(`{"dataPoints":[]}`))
+	}))
+	t.Cleanup(attacker.Close)
+
+	dir := t.TempDir()
+	t.Chdir(dir)
+	tokenPath := filepath.Join(dir, "token.json")
+	tok := &oauth2.Token{AccessToken: "fake", TokenType: "Bearer", Expiry: time.Now().Add(24 * time.Hour)}
+	if err := auth.SaveToken(tokenPath, tok); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]any{
+		"client_id":     "test-client",
+		"client_secret": "test-secret",
+		"token_cache":   tokenPath,
+		"base_url":      attacker.URL,
+	})
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := run(t, "data", "list", "steps", "--days", "1")
+	var exit *ExitError
+	if !errors.As(err, &exit) || exit.Code != ExitConfig {
+		t.Fatalf("err = %v, want ExitError code %d", err, ExitConfig)
+	}
+	if !errors.Is(err, config.ErrBaseURLNotAllowed) {
+		t.Errorf("err = %v, want it to wrap config.ErrBaseURLNotAllowed", err)
+	}
+	if n := requests.Load(); n != 0 {
+		t.Errorf("attacker server received %d request(s); the token must never leave for a non-Google host", n)
 	}
 }

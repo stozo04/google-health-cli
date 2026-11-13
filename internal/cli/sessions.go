@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
 	"strconv"
 	"time"
@@ -77,7 +78,8 @@ func (a *App) runSessions(cmd *cobra.Command, date string, days int, raw, asJSON
 		return writeJSON(out, rawPoints)
 	}
 
-	rows := buildSessionRows(points)
+	rows, unparsed := buildSessionRows(points)
+	reportUnparsedSessions(cmd.ErrOrStderr(), unparsed)
 
 	if asJSON {
 		return writeJSON(out, rows)
@@ -120,13 +122,18 @@ func (a *App) listExercise(ctx context.Context, target time.Time, days int) ([]a
 	return points, nil
 }
 
-// buildSessionRows parses, drops rows without a start, sorts by start ascending,
-// and maps to the frozen row shape.
-func buildSessionRows(points []api.DataPoint) []sessionRow {
+func reportUnparsedSessions(stderr io.Writer, unparsed int) {
+	if unparsed > 0 {
+		fprintf(stderr, "warning: %d exercise point(s) had no parseable start time and are not in this output; run `sessions --raw` to see every point\n", unparsed)
+	}
+}
+
+func buildSessionRows(points []api.DataPoint) (rows []sessionRow, unparsed int) {
 	parsed := make([]health.Session, 0, len(points))
 	for _, p := range points {
 		s := health.ParseSession(p)
 		if s.Start == nil {
+			unparsed++
 			continue
 		}
 		parsed = append(parsed, s)
@@ -135,7 +142,7 @@ func buildSessionRows(points []api.DataPoint) []sessionRow {
 		return parsed[i].Start.Before(*parsed[j].Start)
 	})
 
-	rows := make([]sessionRow, 0, len(parsed))
+	rows = make([]sessionRow, 0, len(parsed))
 	for _, s := range parsed {
 		rows = append(rows, sessionRow{
 			Date:         s.Start.Format("2006-01-02"),
@@ -146,5 +153,5 @@ func buildSessionRows(points []api.DataPoint) []sessionRow {
 			Platform:     s.Platform,
 		})
 	}
-	return rows
+	return rows, unparsed
 }

@@ -131,3 +131,36 @@ func TestOAuthSetupDocWarnsAboutCredentialsAndUnverifiedApp(t *testing.T) {
 		}
 	}
 }
+
+func TestSkillDocDeclaresToolScopeAndConfigBoundary(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read SKILL.md: %v", err)
+	}
+	skill := string(raw)
+	frontmatter, _, ok := strings.Cut(strings.TrimPrefix(skill, "---\n"), "\n---\n")
+	if !ok {
+		t.Fatal("SKILL.md has no frontmatter block")
+	}
+	for _, declared := range []string{
+		"\npermissions:\n",
+		`"network: HTTPS to accounts.google.com, oauth2.googleapis.com and health.googleapis.com only, plus a one-time 127.0.0.1 listener for the auth login callback"`,
+		`"file_read: config.json and the OAuth token cache"`,
+		`"file_write: the OAuth token cache only; it is deleted on auth logout"`,
+		`"env: the five GOOGLE_HEALTH_* variables listed under envVars"`,
+		`"shell: launches the system browser once during auth login`,
+	} {
+		if !strings.Contains(frontmatter, declared) {
+			t.Errorf("SKILL.md frontmatter must declare its tool scope: %q not found", declared)
+		}
+	}
+	for _, marker := range []string{
+		"Config can't redirect your token or widen access",
+		"only `https://health.googleapis.com`",
+		"no parseable start time",
+	} {
+		if !strings.Contains(skill, marker) {
+			t.Errorf("SKILL.md missing %q", marker)
+		}
+	}
+}
