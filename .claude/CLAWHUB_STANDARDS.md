@@ -281,6 +281,11 @@ Concrete guards already in place — keep them, and add to them when you add cap
 - **No silent omissions (Excessive Agency).** `sessions` counts exercise points it can't date and
   reports them on stderr with a pointer to `--raw`. Guard: `TestBuildSessionRowsCountsPointsWithoutStart`
   and `TestReportUnparsedSessionsWarnsOnStderrOnly` (`internal/cli/sessions_test.go`).
+- **Complete or failed, never truncated (Excessive Agency).** Every API read goes through
+  `readResponseBody` (`internal/api/client.go`), which reads one byte past the 32 MiB cap and
+  returns an `*api.Error` (exit 2) when a body is larger, instead of handing back cut-off data.
+  Guard: `TestOversizedResponsesAreErrorsNotTruncatedData` (`internal/api/client_test.go`) covers
+  `RawGet`, `ListDataPoints` and `RollUpDaily`.
 - **Declared tool scope (MCP Least Privilege).** SkillSpector reads a top-level `permissions` list
   in the `SKILL.md` frontmatter, not `metadata.openclaw.permissions`, and maps each entry to a
   capability by its first keyword (`network`, `file_read`, `file_write`, `env`, `shell`). Keep one

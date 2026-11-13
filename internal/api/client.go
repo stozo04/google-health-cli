@@ -14,8 +14,21 @@ import (
 )
 
 // maxResponseBytes caps how much of a response body we read, guarding against a
-// hostile or broken server streaming forever (GOAL.md §9 decode discipline).
-const maxResponseBytes = 32 << 20 // 32 MiB
+// hostile or broken server streaming forever (GOAL.md §9 decode discipline). A
+// larger body is an error, never a silently truncated result.
+var maxResponseBytes int64 = 32 << 20
+
+func readResponseBody(resp *http.Response) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+	if err != nil {
+		return nil, &Error{StatusCode: resp.StatusCode, Message: fmt.Sprintf("read response: %v", err)}
+	}
+	if int64(len(data)) > maxResponseBytes {
+		return nil, &Error{StatusCode: resp.StatusCode, Message: fmt.Sprintf(
+			"response is larger than the %d-byte limit; request a narrower time window", maxResponseBytes)}
+	}
+	return data, nil
+}
 
 // pageSize is clamped to 25: Google caps exercise/sleep dataPoints at 25 per
 // page regardless of the documented 10k max (GOAL.md §9).
@@ -180,9 +193,9 @@ func (c *Client) RawGet(ctx context.Context, path string) (json.RawMessage, erro
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	data, err := readResponseBody(resp)
 	if err != nil {
-		return nil, &Error{StatusCode: resp.StatusCode, Message: fmt.Sprintf("read response: %v", err)}
+		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, &Error{StatusCode: resp.StatusCode, Message: errorMessage(data, resp.StatusCode)}
@@ -203,9 +216,9 @@ func (c *Client) get(ctx context.Context, reqURL string) (*listResponse, error) 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	data, err := readResponseBody(resp)
 	if err != nil {
-		return nil, &Error{StatusCode: resp.StatusCode, Message: fmt.Sprintf("read response: %v", err)}
+		return nil, err
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {

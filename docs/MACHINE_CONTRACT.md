@@ -48,7 +48,7 @@ have leaked.
 | Code | Meaning |
 |---|---|
 | `0` | Success |
-| `2` | Auth / API failure (no/invalid token, refresh failure, non-2xx response, bad JSON) — and `doctor` when not authenticated |
+| `2` | Auth / API failure (no/invalid token, refresh failure, non-2xx response, bad JSON) — and `doctor` when not authenticated; a response larger than 32 MiB is this error, never truncated data |
 | `64` | Usage error (bad flags, bad `--date`, unknown data type, non-listable type, an `api get` path outside the read-only `/v4/` surface, or an expired token with no OAuth client credentials to refresh it) |
 | `78` | Config error (unreadable / invalid `config.json`; a `base_url` other than `https://health.googleapis.com` or a scope outside the six read-only Google Health scopes, from file or env; `auth login` / `auth logout` when `token_cache` holds a file this tool did not write (a token refresh only logs a warning and leaves the file untouched) (no `"owner": "google-health-cli"` marker, and not an older cache at `google-health-cli/token.json`); `doctor` when no config / no `client_id` is found) |
 | `1` | Other failure |
