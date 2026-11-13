@@ -179,3 +179,53 @@ func TestListDataPoints_Empty(t *testing.T) {
 		t.Errorf("got %d points, want 0", len(pts))
 	}
 }
+
+func withMaxResponseBytes(t *testing.T, limit int64) {
+	t.Helper()
+	prev := maxResponseBytes
+	maxResponseBytes = limit
+	t.Cleanup(func() { maxResponseBytes = prev })
+}
+
+func TestOversizedResponsesAreErrorsNotTruncatedData(t *testing.T) {
+	const body = `{"dataPoints":[],"rollupDataPoints":[],"pad":"0123456789"}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+	c := New(srv.Client(), srv.URL, "users/me", nil)
+	steps, _ := LookupDataType("steps")
+	from := time.Date(2026, 6, 14, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 6, 18, 0, 0, 0, 0, time.UTC)
+	calls := map[string]func() error{
+		"RawGet": func() error {
+			_, err := c.RawGet(context.Background(), "/v4/users/me/profile")
+			return err
+		},
+		"ListDataPoints": func() error {
+			_, err := c.ListDataPoints(context.Background(), steps, from, to, true)
+			return err
+		},
+		"RollUpDaily": func() error {
+			_, err := c.RollUpDaily(context.Background(), steps, from, to)
+			return err
+		},
+	}
+
+	for name, call := range calls {
+		t.Run(name+" at the limit", func(t *testing.T) {
+			withMaxResponseBytes(t, int64(len(body)))
+			if err := call(); err != nil {
+				t.Errorf("%s with a body exactly at the limit: %v", name, err)
+			}
+		})
+		t.Run(name+" over the limit", func(t *testing.T) {
+			withMaxResponseBytes(t, int64(len(body))-1)
+			err := call()
+			var apiErr *Error
+			if !errors.As(err, &apiErr) || !strings.Contains(apiErr.Message, "larger than") {
+				t.Errorf("%s with an oversized body: err = %v, want an *Error about the size limit", name, err)
+			}
+		})
+	}
+}

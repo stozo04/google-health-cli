@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -82,7 +83,7 @@ func TestFileOverridesDefaults(t *testing.T) {
 	// A stale daily_log / elliptical_types is silently ignored (loose decode).
 	writeConfig(t, dir, `{
 	  "client_id": "cid-from-file",
-	  "base_url": "https://example.test",
+	  "base_url": "https://health.googleapis.com/",
 	  "user": "users/42",
 	  "scopes": ["https://www.googleapis.com/auth/googlehealth.sleep.readonly"],
 	  "daily_log": "should-be-ignored",
@@ -95,7 +96,7 @@ func TestFileOverridesDefaults(t *testing.T) {
 	if cfg.ClientID != "cid-from-file" {
 		t.Errorf("ClientID = %q", cfg.ClientID)
 	}
-	if cfg.BaseURL != "https://example.test" {
+	if cfg.BaseURL != "https://health.googleapis.com/" {
 		t.Errorf("BaseURL = %q", cfg.BaseURL)
 	}
 	if cfg.User != "users/42" {
@@ -114,7 +115,7 @@ func TestEnvOverridesFile(t *testing.T) {
 
 	t.Setenv(EnvClientID, "env-cid")
 	t.Setenv(EnvClientSecret, "env-secret")
-	t.Setenv(EnvBaseURL, "https://env.test")
+	t.Setenv(EnvBaseURL, "https://health.googleapis.com")
 
 	cfg, err := Load(Options{})
 	if err != nil {
@@ -126,7 +127,7 @@ func TestEnvOverridesFile(t *testing.T) {
 	if cfg.ClientSecret != "env-secret" {
 		t.Errorf("ClientSecret = %q, want env value", cfg.ClientSecret)
 	}
-	if cfg.BaseURL != "https://env.test" {
+	if cfg.BaseURL != "https://health.googleapis.com" {
 		t.Errorf("BaseURL = %q, want env value", cfg.BaseURL)
 	}
 }
@@ -337,4 +338,77 @@ func TestTokenCacheEnvOverrideIsNotDefault(t *testing.T) {
 func isWithinDir(path, dir string) bool {
 	rel, err := filepath.Rel(dir, path)
 	return err == nil && !strings.HasPrefix(rel, "..")
+}
+
+func TestBaseURLMustBeGoogleHealthOrigin(t *testing.T) {
+	rejected := []string{
+		"https://attacker.example",
+		"http://health.googleapis.com",
+		"https://health.googleapis.com.attacker.example",
+		"https://health.googleapis.com:8443",
+		"https://user@health.googleapis.com",
+		"https://health.googleapis.com/v4",
+		"https://health.googleapis.com/?x=1",
+		"https://health.googleapis.com/#frag",
+		"//health.googleapis.com",
+		"",
+	}
+	for _, raw := range rejected {
+		t.Run("file "+raw, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			isolateAppDir(t)
+			neutralizeEnv(t)
+			writeConfig(t, dir, `{"base_url": "`+raw+`"}`)
+			if _, err := Load(Options{}); !errors.Is(err, ErrBaseURLNotAllowed) {
+				t.Errorf("Load with base_url %q: err = %v, want ErrBaseURLNotAllowed", raw, err)
+			}
+		})
+		t.Run("env "+raw, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			isolateAppDir(t)
+			neutralizeEnv(t)
+			t.Setenv(EnvBaseURL, raw)
+			if _, err := Load(Options{}); !errors.Is(err, ErrBaseURLNotAllowed) {
+				t.Errorf("Load with %s=%q: err = %v, want ErrBaseURLNotAllowed", EnvBaseURL, raw, err)
+			}
+		})
+	}
+}
+
+func TestEnvBaseURLOverridesDisallowedFileValue(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	isolateAppDir(t)
+	neutralizeEnv(t)
+	writeConfig(t, dir, `{"base_url": "https://attacker.example"}`)
+	t.Setenv(EnvBaseURL, DefaultBaseURL)
+	cfg, err := Load(Options{})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.BaseURL != DefaultBaseURL {
+		t.Errorf("BaseURL = %q, want %q", cfg.BaseURL, DefaultBaseURL)
+	}
+}
+
+func TestScopesMustBeReadOnlyGoogleHealthScopes(t *testing.T) {
+	rejected := map[string]string{
+		"write scope":     `["https://www.googleapis.com/auth/googlehealth.sleep"]`,
+		"unrelated scope": `["https://www.googleapis.com/auth/drive"]`,
+		"mixed":           `["https://www.googleapis.com/auth/googlehealth.sleep.readonly", "https://mail.google.com/"]`,
+		"empty":           `[]`,
+	}
+	for name, scopes := range rejected {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			isolateAppDir(t)
+			neutralizeEnv(t)
+			writeConfig(t, dir, `{"scopes": `+scopes+`}`)
+			if _, err := Load(Options{}); !errors.Is(err, ErrScopeNotAllowed) {
+				t.Errorf("Load with scopes %s: err = %v, want ErrScopeNotAllowed", scopes, err)
+			}
+		})
+	}
 }

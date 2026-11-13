@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -69,7 +70,7 @@ func assertGolden(t *testing.T, name string, got []byte) {
 }
 
 func TestSessionsJSONGolden(t *testing.T) {
-	rows := buildSessionRows(fixturePoints(t))
+	rows, _ := buildSessionRows(fixturePoints(t))
 	var buf bytes.Buffer
 	if err := writeJSON(&buf, rows); err != nil {
 		t.Fatalf("writeJSON: %v", err)
@@ -88,4 +89,27 @@ func TestSessionsRawGolden(t *testing.T) {
 		t.Fatalf("writeJSON: %v", err)
 	}
 	assertGolden(t, "sessions_raw.golden", buf.Bytes())
+}
+
+func TestBuildSessionRowsCountsPointsWithoutStart(t *testing.T) {
+	points := append(fixturePoints(t), api.DataPoint{}, api.DataPoint{})
+	rows, unparsed := buildSessionRows(points)
+	if unparsed != 2 {
+		t.Errorf("unparsed = %d, want 2", unparsed)
+	}
+	if len(rows) != len(points)-2 {
+		t.Errorf("rows = %d, want %d", len(rows), len(points)-2)
+	}
+}
+
+func TestReportUnparsedSessionsWarnsOnStderrOnly(t *testing.T) {
+	var stderr bytes.Buffer
+	reportUnparsedSessions(&stderr, 0)
+	if stderr.Len() != 0 {
+		t.Errorf("no unparsed points should print nothing, got %q", stderr.String())
+	}
+	reportUnparsedSessions(&stderr, 3)
+	if !strings.Contains(stderr.String(), "3 exercise point(s)") || !strings.Contains(stderr.String(), "sessions --raw") {
+		t.Errorf("warning = %q, want the count and the --raw pointer", stderr.String())
+	}
 }

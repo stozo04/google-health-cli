@@ -2,13 +2,17 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -539,5 +543,137 @@ func TestEndToEndMigratesLegacyTokenToCacheDir(t *testing.T) {
 	}
 	if moved.AccessToken != "live" {
 		t.Errorf("relocated token AccessToken = %q, want live (session not preserved)", moved.AccessToken)
+	}
+}
+
+func TestWorkspaceConfigCannotRedirectToken(t *testing.T) {
+	var requests atomic.Int32
+	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write([]byte(`{"dataPoints":[]}`))
+	}))
+	t.Cleanup(attacker.Close)
+
+	dir := t.TempDir()
+	t.Chdir(dir)
+	tokenPath := filepath.Join(dir, "token.json")
+	tok := &oauth2.Token{AccessToken: "fake", TokenType: "Bearer", Expiry: time.Now().Add(24 * time.Hour)}
+	if err := auth.SaveToken(tokenPath, tok); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]any{
+		"client_id":     "test-client",
+		"client_secret": "test-secret",
+		"token_cache":   tokenPath,
+		"base_url":      attacker.URL,
+	})
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := run(t, "data", "list", "steps", "--days", "1")
+	var exit *ExitError
+	if !errors.As(err, &exit) || exit.Code != ExitConfig {
+		t.Fatalf("err = %v, want ExitError code %d", err, ExitConfig)
+	}
+	if !errors.Is(err, config.ErrBaseURLNotAllowed) {
+		t.Errorf("err = %v, want it to wrap config.ErrBaseURLNotAllowed", err)
+	}
+	if n := requests.Load(); n != 0 {
+		t.Errorf("attacker server received %d request(s); the token must never leave for a non-Google host", n)
+	}
+}
+
+func TestWorkspaceConfigCannotRedirectTokenCacheOntoOtherFiles(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	decoy := filepath.Join(t.TempDir(), "id_ed25519")
+	const decoyContent = "-----BEGIN OPENSSH PRIVATE KEY-----\nnot-a-real-key\n"
+	if err := os.WriteFile(decoy, []byte(decoyContent), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]any{
+		"client_id":     "test-client",
+		"client_secret": "test-secret",
+		"token_cache":   decoy,
+	})
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := run(t, "auth", "logout")
+	var exit *ExitError
+	if !errors.As(err, &exit) || exit.Code != ExitConfig {
+		t.Fatalf("auth logout: err = %v, want ExitError code %d", err, ExitConfig)
+	}
+	got, rerr := os.ReadFile(decoy)
+	if rerr != nil || string(got) != decoyContent {
+		t.Errorf("decoy file was deleted or changed by auth logout: %q, %v", got, rerr)
+	}
+}
+
+func TestAuthLoginRefusesForeignTokenCacheBeforeOpeningBrowser(t *testing.T) {
+	dir := t.TempDir()
+	decoy := filepath.Join(dir, "other-app", "token.json")
+	if err := os.MkdirAll(filepath.Dir(decoy), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(decoy, []byte(`{"access_token":"other","refresh_token":"other"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfgPath := filepath.Join(dir, "config.json")
+	body, _ := json.Marshal(map[string]any{
+		"client_id": "test-client", "client_secret": "test-secret", "token_cache": decoy,
+	})
+	if err := os.WriteFile(cfgPath, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	browserOpened := false
+	prev := openBrowser
+	openBrowser = func(string) error { browserOpened = true; return nil }
+	t.Cleanup(func() { openBrowser = prev })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	root := NewRootCmd()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--config", cfgPath, "auth", "login"})
+	err := root.ExecuteContext(ctx)
+
+	var exit *ExitError
+	if !errors.As(err, &exit) || exit.Code != ExitConfig {
+		t.Errorf("auth login: err = %v, want ExitError code %d", err, ExitConfig)
+	}
+	if browserOpened {
+		t.Error("auth login opened the consent flow before checking the token cache path")
+	}
+}
+
+func TestUntrustedTokenCacheCannotHangAPICommands(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs /dev/zero")
+	}
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	body, _ := json.Marshal(map[string]any{
+		"client_id": "test-client", "client_secret": "test-secret", "token_cache": "/dev/zero",
+	})
+	if err := os.WriteFile(cfgPath, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := run(t, "--config", cfgPath, "data", "list", "steps", "--days", "1")
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		var exit *ExitError
+		if !errors.As(err, &exit) || exit.Code != ExitAuth {
+			t.Errorf("data list with token_cache=/dev/zero: err = %v, want ExitError code %d", err, ExitAuth)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("data list hung reading token_cache=/dev/zero")
 	}
 }

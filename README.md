@@ -108,10 +108,10 @@ looked.
 |---|---|---|
 | `client_id` | `""` | `GOOGLE_HEALTH_CLIENT_ID` |
 | `client_secret` | `""` | `GOOGLE_HEALTH_CLIENT_SECRET` |
-| `base_url` | `https://health.googleapis.com` | `GOOGLE_HEALTH_BASE_URL` |
+| `base_url` | `https://health.googleapis.com` (the only accepted value) | `GOOGLE_HEALTH_BASE_URL` |
 | `user` | `users/me` | — |
 | `token_cache` | `<user cache dir>/google-health-cli/token.json` (non-roaming) | `GOOGLE_HEALTH_TOKEN_CACHE` |
-| `scopes` | the six read-only Google Health scopes (see below) | — |
+| `scopes` | the six read-only Google Health scopes (see below); a subset is allowed, anything else is rejected | — |
 
 `config.json` and the token cache hold credentials and must never be committed. The CLI writes the token cache
 `0600`; it never creates `config.json`, so restrict that yourself (`chmod 600 config.json`).

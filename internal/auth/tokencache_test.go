@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -202,5 +203,221 @@ func TestPersistingSourceSkipsWhenUnchanged(t *testing.T) {
 	// Unchanged token must not write the cache.
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("cache written despite no change: %v", err)
+	}
+}
+
+const decoyContent = "-----BEGIN OPENSSH PRIVATE KEY-----\nnot-a-real-key\n"
+
+func writeDecoy(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "id_ed25519")
+	if err := os.WriteFile(path, []byte(decoyContent), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func assertDecoyIntact(t *testing.T, path string) {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("decoy file gone: %v", err)
+	}
+	if string(got) != decoyContent {
+		t.Errorf("decoy file was rewritten: %q", got)
+	}
+}
+
+func TestSaveTokenRefusesToOverwriteNonTokenFile(t *testing.T) {
+	path := writeDecoy(t)
+	err := SaveToken(path, &oauth2.Token{AccessToken: "x"})
+	if !errors.Is(err, ErrNotTokenCache) {
+		t.Errorf("SaveToken over a non-token file: err = %v, want ErrNotTokenCache", err)
+	}
+	assertDecoyIntact(t, path)
+}
+
+func TestDeleteTokenRefusesToDeleteNonTokenFile(t *testing.T) {
+	path := writeDecoy(t)
+	if err := DeleteToken(path); !errors.Is(err, ErrNotTokenCache) {
+		t.Errorf("DeleteToken on a non-token file: err = %v, want ErrNotTokenCache", err)
+	}
+	assertDecoyIntact(t, path)
+}
+
+func writeFile(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSaveTokenReplacesOnlyCachesThisToolOwns(t *testing.T) {
+	const foreignToken = `{"access_token":"other-app","refresh_token":"other-refresh","token_type":"Bearer"}`
+	cases := []struct {
+		name    string
+		path    func(dir string) string
+		setup   func(t *testing.T, path string)
+		allowed bool
+	}{
+		{
+			"our marked cache at a custom path", func(d string) string { return filepath.Join(d, "custom.json") },
+			func(t *testing.T, p string) {
+				if err := SaveToken(p, &oauth2.Token{AccessToken: "old"}); err != nil {
+					t.Fatal(err)
+				}
+			}, true,
+		},
+		{
+			"empty file", func(d string) string { return filepath.Join(d, "custom.json") },
+			func(t *testing.T, p string) { writeFile(t, p, "") }, false,
+		},
+		{"unmarked token at the conventional path", func(d string) string {
+			return filepath.Join(d, "google-health-cli", "token.json")
+		}, func(t *testing.T, p string) { writeFile(t, p, foreignToken) }, true},
+		{
+			"another app's token.json", func(d string) string { return filepath.Join(d, "other-app", "token.json") },
+			func(t *testing.T, p string) { writeFile(t, p, foreignToken) }, false,
+		},
+		{
+			"oversized file", func(d string) string { return filepath.Join(d, "custom.json") },
+			func(t *testing.T, p string) { writeFile(t, p, strings.Repeat(" ", maxTokenCacheBytes+1)) }, false,
+		},
+		{
+			"directory", func(d string) string { return filepath.Join(d, "token.json") },
+			func(t *testing.T, p string) {
+				if err := os.MkdirAll(p, 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}, false,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			path := c.path(t.TempDir())
+			c.setup(t, path)
+			err := SaveToken(path, &oauth2.Token{AccessToken: "new"})
+			if c.allowed {
+				if err != nil {
+					t.Fatalf("SaveToken: %v", err)
+				}
+				got, lerr := LoadToken(path)
+				if lerr != nil || got == nil || got.AccessToken != "new" {
+					t.Errorf("LoadToken after save = %+v, %v; want access token %q", got, lerr, "new")
+				}
+				return
+			}
+			if !errors.Is(err, ErrNotTokenCache) {
+				t.Errorf("SaveToken: err = %v, want ErrNotTokenCache", err)
+			}
+			if derr := DeleteToken(path); !errors.Is(derr, ErrNotTokenCache) {
+				t.Errorf("DeleteToken: err = %v, want ErrNotTokenCache", derr)
+			}
+			if _, serr := os.Stat(path); serr != nil {
+				t.Errorf("refused target was removed: %v", serr)
+			}
+		})
+	}
+}
+
+func TestSaveTokenMarksCacheAsOwned(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "custom.json")
+	if err := SaveToken(path, &oauth2.Token{AccessToken: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"owner": "google-health-cli"`) {
+		t.Errorf("token cache lacks the ownership marker: %s", raw)
+	}
+}
+
+func TestTokenCacheRefusesSymlinks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation needs extra privileges on Windows")
+	}
+	dir := t.TempDir()
+	target := filepath.Join(dir, "other-app", "token.json")
+	writeFile(t, target, `{"access_token":"other-app","refresh_token":"other-refresh"}`)
+	link := filepath.Join(dir, "google-health-cli", "token.json")
+	if err := os.MkdirAll(filepath.Dir(link), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveToken(link, &oauth2.Token{AccessToken: "new"}); !errors.Is(err, ErrNotTokenCache) {
+		t.Errorf("SaveToken through a symlink: err = %v, want ErrNotTokenCache", err)
+	}
+	if err := DeleteToken(link); !errors.Is(err, ErrNotTokenCache) {
+		t.Errorf("DeleteToken on a symlink: err = %v, want ErrNotTokenCache", err)
+	}
+	got, err := os.ReadFile(target)
+	if err != nil || !strings.Contains(string(got), "other-app") {
+		t.Errorf("symlink target was changed: %q, %v", got, err)
+	}
+}
+
+func TestRefreshRewritesUnmarkedCacheOnlyWithItsOwnRefreshToken(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "custom.json")
+	writeFile(t, path, `{"access_token":"old","refresh_token":"ours","token_type":"Bearer"}`)
+
+	if err := saveToken(path, &oauth2.Token{AccessToken: "x"}, "someone-elses"); !errors.Is(err, ErrNotTokenCache) {
+		t.Errorf("save with a different proven refresh token: err = %v, want ErrNotTokenCache", err)
+	}
+	if err := saveToken(path, &oauth2.Token{AccessToken: "fresh", RefreshToken: "ours"}, "ours"); err != nil {
+		t.Fatalf("save after refreshing with the cache's own refresh token: %v", err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"owner": "google-health-cli"`) || !strings.Contains(string(raw), "fresh") {
+		t.Errorf("refreshed cache should be rewritten with the owner marker: %s", raw)
+	}
+}
+
+func TestLoadTokenRefusesUntrustedCacheTargets(t *testing.T) {
+	dir := t.TempDir()
+	token := filepath.Join(dir, "real", "token.json")
+	writeFile(t, token, `{"access_token":"a","refresh_token":"r"}`)
+	oversized := filepath.Join(dir, "big.json")
+	writeFile(t, oversized, `{"access_token":"a","pad":"`+strings.Repeat("x", maxTokenCacheBytes)+`"}`)
+
+	targets := map[string]string{
+		"directory": dir,
+		"oversized": oversized,
+	}
+	if runtime.GOOS != "windows" {
+		link := filepath.Join(dir, "link.json")
+		if err := os.Symlink(token, link); err != nil {
+			t.Fatal(err)
+		}
+		targets["symlink"] = link
+		targets["endless device"] = "/dev/zero"
+	}
+	for name, path := range targets {
+		t.Run(name, func(t *testing.T) {
+			done := make(chan struct{})
+			var tok *oauth2.Token
+			var err error
+			go func() {
+				tok, err = LoadToken(path)
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatalf("LoadToken(%s) did not return; an untrusted token_cache must never block", path)
+			}
+			if tok != nil || !errors.Is(err, ErrNotTokenCache) {
+				t.Errorf("LoadToken(%s) = %v, %v; want nil, ErrNotTokenCache", path, tok, err)
+			}
+		})
 	}
 }

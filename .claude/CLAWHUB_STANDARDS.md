@@ -257,6 +257,44 @@ Concrete guards already in place — keep them, and add to them when you add cap
   plaintext-secrets warning and limits the "unverified app" bypass to an OAuth client the user
   created. `TestOAuthSetupDocWarnsAboutCredentialsAndUnverifiedApp`
   (`internal/cli/skill_doc_test.go`) fails if either is removed.
+- **Config can't redirect the token or widen scopes (Insecure Coding / Excessive Agency).** A
+  `config.json` is discovered from the working directory, so its contents are untrusted input.
+  `config.Load` rejects any effective `base_url` other than `https://health.googleapis.com`
+  (`ErrBaseURLNotAllowed`) and any `scopes` entry outside `DefaultScopes`, or an empty list
+  (`ErrScopeNotAllowed`); the CLI maps both to exit 78 before any request.
+  `TestBaseURLMustBeGoogleHealthOrigin`, `TestScopesMustBeReadOnlyGoogleHealthScopes`
+  (`internal/config/config_test.go`) and `TestWorkspaceConfigCannotRedirectToken`
+  (`internal/cli/commands_test.go`, which asserts a hostile server receives zero requests) pin it.
+  Tests reach a local server only through the in-package `baseURLOverride` hook, never config;
+  `buildAPIClient` re-checks the base URL so the boundary is visible where the token meets the
+  network. A discovered `token_cache` is untrusted too, for reads as well as writes:
+  `LoadToken` and the write guard share `readTokenCacheFile`, which refuses a symlink, a
+  non-regular file or anything over 64 KiB before reading, so it can't hang on a FIFO or device
+  (`TestUntrustedTokenCacheCannotHangAPICommands`). On the write side, every cache `SaveToken` writes carries
+  `"owner": "google-health-cli"`, and `SaveToken` / `DeleteToken` touch an existing file only if it
+  is a regular file (checked with `Lstat`, so symlinks are refused) under 64 KiB that carries
+  that marker, is an older unmarked token at `google-health-cli/token.json`, or (refresh only)
+  holds the refresh token that just succeeded with this tool's OAuth client, which upgrades older
+  custom-path caches (`auth.ErrNotTokenCache`, exit 78 otherwise). Content alone is not
+  proof: another app's `token.json` has the same fields, and an empty file may be someone's marker. Guards: `TestSaveTokenRefusesToOverwriteNonTokenFile`,
+  `TestDeleteTokenRefusesToDeleteNonTokenFile`, `TestSaveTokenReplacesOnlyCachesThisToolOwns`,
+  `TestSaveTokenMarksCacheAsOwned`, `TestTokenCacheRefusesSymlinks`,
+  `TestLoadTokenRefusesUntrustedCacheTargets`,
+  `TestRefreshRewritesUnmarkedCacheOnlyWithItsOwnRefreshToken` (`internal/auth/tokencache_test.go`) and
+  `TestWorkspaceConfigCannotRedirectTokenCacheOntoOtherFiles`.
+- **No silent omissions (Excessive Agency).** `sessions` counts exercise points it can't date and
+  reports them on stderr with a pointer to `--raw`. Guard: `TestBuildSessionRowsCountsPointsWithoutStart`
+  and `TestReportUnparsedSessionsWarnsOnStderrOnly` (`internal/cli/sessions_test.go`).
+- **Complete or failed, never truncated (Excessive Agency).** Every API read goes through
+  `readResponseBody` (`internal/api/client.go`), which reads one byte past the 32 MiB cap and
+  returns an `*api.Error` (exit 2) when a body is larger, instead of handing back cut-off data.
+  Guard: `TestOversizedResponsesAreErrorsNotTruncatedData` (`internal/api/client_test.go`) covers
+  `RawGet`, `ListDataPoints` and `RollUpDaily`.
+- **Declared tool scope (MCP Least Privilege).** SkillSpector reads a top-level `permissions` list
+  in the `SKILL.md` frontmatter, not `metadata.openclaw.permissions`, and maps each entry to a
+  capability by its first keyword (`network`, `file_read`, `file_write`, `env`, `shell`). Keep one
+  entry per real capability, worded so no earlier keyword matches first. Guard:
+  `TestSkillDocDeclaresToolScopeAndConfigBoundary` (`internal/cli/skill_doc_test.go`).
 - **No dependency redirection (Supply Chain).** `TestGoModHasNoReplaceDirectives`
   (`internal/cli/source_guards_test.go`) fails if `go.mod` carries a `replace` directive; the
   detector is unit-tested (`TestReplaceDirectiveDetection`). `go.sum` checksums are enforced by the
