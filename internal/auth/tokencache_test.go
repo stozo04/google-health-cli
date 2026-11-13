@@ -273,7 +273,7 @@ func TestSaveTokenReplacesOnlyCachesThisToolOwns(t *testing.T) {
 		},
 		{
 			"empty file", func(d string) string { return filepath.Join(d, "custom.json") },
-			func(t *testing.T, p string) { writeFile(t, p, "") }, true,
+			func(t *testing.T, p string) { writeFile(t, p, "") }, false,
 		},
 		{"unmarked token at the conventional path", func(d string) string {
 			return filepath.Join(d, "google-health-cli", "token.json")

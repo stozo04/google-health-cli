@@ -7,7 +7,6 @@
 package auth
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -52,7 +51,7 @@ func ensureTokenCacheIsOurs(path, provenRefreshToken string) error {
 	if err != nil {
 		return err
 	}
-	if len(bytes.TrimSpace(data)) == 0 || isOurTokenCache(path, data, provenRefreshToken) {
+	if isOurTokenCache(path, data, provenRefreshToken) {
 		return nil
 	}
 	return refuseTokenCache(path)

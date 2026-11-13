@@ -20,9 +20,10 @@ import (
 // {date, exercise_type, duration_min, avg_hr, calories, platform}.
 //
 // `sessions` is a convenience over `data list exercise` — it parses the verbose
-// exercise payload into the fields most callers want. It applies NO filtering;
-// every exercise type the watch logged is returned, and the consuming agent
-// keeps whatever it cares about.
+// exercise payload into the fields most callers want. Every exercise type is
+// returned; a point with no parseable start time can't be dated, so it is left
+// out and counted on stderr (reportUnparsedSessions), and `sessions --raw`
+// returns every point.
 type sessionRow struct {
 	Date         string `json:"date"`
 	ExerciseType string `json:"exercise_type"`
