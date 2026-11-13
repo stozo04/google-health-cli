@@ -89,6 +89,8 @@ there is **no version constant to bump**. The ClawHub publish workflow (`publish
 changes on `main` (or
 via manual `workflow_dispatch`), so a fix reaches ClawHub on merge, not on tag. `.clawhubignore` decides
 what ships: keep tests, scripts and agent-instruction docs out of it (guarded by `TestClawhubPackageExcludesRepoTooling`).
+Both ClawHub workflows publish through `scripts/publish-clawhub.sh`, which retries with the next patch version when
+a version still in ClawHub review blocks the automatic one (see `RELEASING.md`).
 
 - **Versioning: SemVer.** A backward-compatible change (e.g. the auto-migrated token-cache default in
   v1.3.0) is a **minor**; breaking the documented JSON shapes / exit codes (`AGENTS.md`) is a **major**.

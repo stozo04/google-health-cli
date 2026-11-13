@@ -27,6 +27,9 @@ jobs:
       - name: Check agent instructions
         run: make check-agents
 
+      - name: Test publish script
+        run: make test-scripts
+
       - name: Build
         run: go build ./...
 

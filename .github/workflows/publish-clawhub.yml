@@ -33,4 +33,4 @@ jobs:
           CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
 
       - name: Publish skill
-        run: clawhub skill publish . --owner stozo04 --slug google-health-cli --name "Google Health"
+        run: scripts/publish-clawhub.sh google-health-cli stozo04 "Google Health"
