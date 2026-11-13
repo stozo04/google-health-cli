@@ -44,12 +44,16 @@ func newAuthLoginCmd(app *App) *cobra.Command {
 				))
 			}
 
+			if err := auth.CheckTokenCacheWritable(cfg.TokenCache); err != nil {
+				return withCode(tokenCacheExitCode(err), fmt.Errorf("cannot cache a token: %w", err))
+			}
+
 			oauthCfg := auth.OAuthConfig(cfg.ClientID, cfg.ClientSecret, cfg.Scopes)
 			stderr := cmd.ErrOrStderr()
 			open := func(url string) error {
 				fprintln(stderr, "Opening your browser to authorize read-only Google Health access.")
 				fprintln(stderr, "If it doesn't open automatically, visit:\n  "+url)
-				return auth.OpenBrowser(url)
+				return openBrowser(url)
 			}
 
 			res, err := auth.Login(cmd.Context(), oauthCfg, open, app.logger)
@@ -68,6 +72,8 @@ func newAuthLoginCmd(app *App) *cobra.Command {
 }
 
 // newAuthLogoutCmd deletes the token cache (GOAL.md §8).
+var openBrowser = auth.OpenBrowser
+
 func newAuthLogoutCmd(app *App) *cobra.Command {
 	return &cobra.Command{
 		Use:   "logout",

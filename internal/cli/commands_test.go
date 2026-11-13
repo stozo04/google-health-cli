@@ -2,8 +2,10 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -606,5 +608,44 @@ func TestWorkspaceConfigCannotRedirectTokenCacheOntoOtherFiles(t *testing.T) {
 	got, rerr := os.ReadFile(decoy)
 	if rerr != nil || string(got) != decoyContent {
 		t.Errorf("decoy file was deleted or changed by auth logout: %q, %v", got, rerr)
+	}
+}
+
+func TestAuthLoginRefusesForeignTokenCacheBeforeOpeningBrowser(t *testing.T) {
+	dir := t.TempDir()
+	decoy := filepath.Join(dir, "other-app", "token.json")
+	if err := os.MkdirAll(filepath.Dir(decoy), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(decoy, []byte(`{"access_token":"other","refresh_token":"other"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfgPath := filepath.Join(dir, "config.json")
+	body, _ := json.Marshal(map[string]any{
+		"client_id": "test-client", "client_secret": "test-secret", "token_cache": decoy,
+	})
+	if err := os.WriteFile(cfgPath, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	browserOpened := false
+	prev := openBrowser
+	openBrowser = func(string) error { browserOpened = true; return nil }
+	t.Cleanup(func() { openBrowser = prev })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	root := NewRootCmd()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--config", cfgPath, "auth", "login"})
+	err := root.ExecuteContext(ctx)
+
+	var exit *ExitError
+	if !errors.As(err, &exit) || exit.Code != ExitConfig {
+		t.Errorf("auth login: err = %v, want ExitError code %d", err, ExitConfig)
+	}
+	if browserOpened {
+		t.Error("auth login opened the consent flow before checking the token cache path")
 	}
 }

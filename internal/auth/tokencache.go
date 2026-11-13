@@ -98,6 +98,12 @@ func refuseTokenCache(path string) error {
 	return fmt.Errorf("%w: %s; point token_cache at a new path, or delete the file yourself if it is this tool's stale cache", ErrNotTokenCache, path)
 }
 
+// CheckTokenCacheWritable reports ErrNotTokenCache when SaveToken would refuse
+// path, so a caller can fail before an interactive login rather than after it.
+func CheckTokenCacheWritable(path string) error {
+	return ensureTokenCacheIsOurs(path, "")
+}
+
 // LoadToken reads the cached *oauth2.Token. A missing file is not an error — it
 // returns (nil, nil) so callers can prompt for `auth login`. A corrupt cache is
 // likewise treated as "no token"; SaveToken and DeleteToken refuse to touch it
