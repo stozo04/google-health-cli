@@ -37,17 +37,10 @@ type ownedToken struct {
 }
 
 func ensureTokenCacheIsOurs(path, provenRefreshToken string) error {
-	info, err := os.Lstat(path)
+	data, err := readTokenCacheFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
-	if err != nil {
-		return fmt.Errorf("stat token cache %s: %w", path, err)
-	}
-	if !info.Mode().IsRegular() || info.Size() > maxTokenCacheBytes {
-		return refuseTokenCache(path)
-	}
-	data, err := readBounded(path)
 	if err != nil {
 		return err
 	}
@@ -57,15 +50,35 @@ func ensureTokenCacheIsOurs(path, provenRefreshToken string) error {
 	return refuseTokenCache(path)
 }
 
-func readBounded(path string) ([]byte, error) {
+func readTokenCacheFile(path string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("stat token cache %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() || info.Size() > maxTokenCacheBytes {
+		return nil, refuseTokenCache(path)
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("read token cache %s: %w", path, err)
 	}
 	defer func() { _ = f.Close() }()
+	opened, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("stat token cache %s: %w", path, err)
+	}
+	if !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
+		return nil, refuseTokenCache(path)
+	}
 	data, err := io.ReadAll(io.LimitReader(f, maxTokenCacheBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read token cache %s: %w", path, err)
+	}
+	if len(data) > maxTokenCacheBytes {
+		return nil, refuseTokenCache(path)
 	}
 	return data, nil
 }
@@ -106,14 +119,17 @@ func CheckTokenCacheWritable(path string) error {
 // LoadToken reads the cached *oauth2.Token. A missing file is not an error — it
 // returns (nil, nil) so callers can prompt for `auth login`. A corrupt cache is
 // likewise treated as "no token"; SaveToken and DeleteToken refuse to touch it
-// (ErrNotTokenCache), so the user removes it before logging in again.
+// (ErrNotTokenCache), so the user removes it before logging in again. A symlink,
+// a non-regular file (device, FIFO, directory) or a file over 64 KiB is never
+// read: LoadToken returns ErrNotTokenCache, because token_cache may come from an
+// untrusted config.json and must not be able to hang or exhaust the process.
 func LoadToken(path string) (*oauth2.Token, error) {
-	data, err := os.ReadFile(path)
+	data, err := readTokenCacheFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("read token cache %s: %w", path, err)
+		return nil, err
 	}
 	var tok oauth2.Token
 	if err := json.Unmarshal(data, &tok); err != nil {

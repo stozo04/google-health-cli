@@ -381,3 +381,43 @@ func TestRefreshRewritesUnmarkedCacheOnlyWithItsOwnRefreshToken(t *testing.T) {
 		t.Errorf("refreshed cache should be rewritten with the owner marker: %s", raw)
 	}
 }
+
+func TestLoadTokenRefusesUntrustedCacheTargets(t *testing.T) {
+	dir := t.TempDir()
+	token := filepath.Join(dir, "real", "token.json")
+	writeFile(t, token, `{"access_token":"a","refresh_token":"r"}`)
+	oversized := filepath.Join(dir, "big.json")
+	writeFile(t, oversized, `{"access_token":"a","pad":"`+strings.Repeat("x", maxTokenCacheBytes)+`"}`)
+
+	targets := map[string]string{
+		"directory": dir,
+		"oversized": oversized,
+	}
+	if runtime.GOOS != "windows" {
+		link := filepath.Join(dir, "link.json")
+		if err := os.Symlink(token, link); err != nil {
+			t.Fatal(err)
+		}
+		targets["symlink"] = link
+		targets["endless device"] = "/dev/zero"
+	}
+	for name, path := range targets {
+		t.Run(name, func(t *testing.T) {
+			done := make(chan struct{})
+			var tok *oauth2.Token
+			var err error
+			go func() {
+				tok, err = LoadToken(path)
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatalf("LoadToken(%s) did not return; an untrusted token_cache must never block", path)
+			}
+			if tok != nil || !errors.Is(err, ErrNotTokenCache) {
+				t.Errorf("LoadToken(%s) = %v, %v; want nil, ErrNotTokenCache", path, tok, err)
+			}
+		})
+	}
+}

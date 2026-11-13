@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -647,5 +648,32 @@ func TestAuthLoginRefusesForeignTokenCacheBeforeOpeningBrowser(t *testing.T) {
 	}
 	if browserOpened {
 		t.Error("auth login opened the consent flow before checking the token cache path")
+	}
+}
+
+func TestUntrustedTokenCacheCannotHangAPICommands(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs /dev/zero")
+	}
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	body, _ := json.Marshal(map[string]any{
+		"client_id": "test-client", "client_secret": "test-secret", "token_cache": "/dev/zero",
+	})
+	if err := os.WriteFile(cfgPath, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := run(t, "--config", cfgPath, "data", "list", "steps", "--days", "1")
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		var exit *ExitError
+		if !errors.As(err, &exit) || exit.Code != ExitAuth {
+			t.Errorf("data list with token_cache=/dev/zero: err = %v, want ExitError code %d", err, ExitAuth)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("data list hung reading token_cache=/dev/zero")
 	}
 }
