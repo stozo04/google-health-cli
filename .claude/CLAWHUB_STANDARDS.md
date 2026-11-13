@@ -129,7 +129,8 @@ guard the moment a change makes that category exploitable.
      consented; make clear the one-time `auth login` is the owner consenting to *read-only access
      for the tool*, **not** consent for a downstream agent to collect/retain/transmit more broadly;
    - **credential-protection guidance** — the OAuth `client_id`/`client_secret` and the cached
-     token are **sensitive secrets stored on disk in plaintext**; say they're written `0600` and
+     token are **sensitive secrets stored on disk in plaintext**; say the token cache is written `0600`,
+     that the user must `chmod 600` the `config.json` they create, and that both are
      gitignored, and tell the caller to keep them out of commits, shared dirs, backups, and logs
      (and to rotate / `auth logout` on a suspected leak). Encouraging plaintext secret storage
      *without* this warning is itself a ClawHub "Missing User Warnings" finding.
@@ -243,6 +244,19 @@ Concrete guards already in place — keep them, and add to them when you add cap
   dynamic to verify — and, on the advertisement side, fails if `SKILL.md` stops documenting a
   declared key. Its matcher is unit-tested (`TestAllowedEnvReadLogic`) and it caught (and now
   prevents reintroducing) a stray `LOG_LEVEL` read.
+- **Published package == the skill (all categories).** `clawhub skill publish .` uploads every
+  non-dot file under the repo root except what `.clawhubignore` lists, and ClawHub scans every file
+  it receives as if it were the skill. `.clawhubignore` keeps tests, `testdata/`, `scripts/` and the
+  agent-instruction docs (`AGENTS.md`, `CLAUDE.md`, `Engineering-Prompt.md`, `RELEASING.md`,
+  `docs/OPERATING_INSTRUCTIONS.md`, `docs/PROJECT_INSTRUCTIONS.md`, `docs/project-agent-audit.md`)
+  out of the package; the shipped Go source, `SKILL.md`, `OAUTH_SETUP.md`, `README.md` and
+  `docs/MACHINE_CONTRACT.md` stay in so reviewers can check behavior. `TestClawhubPackageExcludesRepoTooling`
+  and `TestClawhubPackageKeepsSkillDocs` (`internal/cli/clawhub_package_test.go`) fail if either set
+  drifts. When you add repo tooling or agent docs, add them to `.clawhubignore` and the test.
+- **Setup-guide warnings (rule 3).** `OAUTH_SETUP.md` carries the "Protect your credentials"
+  plaintext-secrets warning and limits the "unverified app" bypass to an OAuth client the user
+  created. `TestOAuthSetupDocWarnsAboutCredentialsAndUnverifiedApp`
+  (`internal/cli/skill_doc_test.go`) fails if either is removed.
 - **No dependency redirection (Supply Chain).** `TestGoModHasNoReplaceDirectives`
   (`internal/cli/source_guards_test.go`) fails if `go.mod` carries a `replace` directive; the
   detector is unit-tested (`TestReplaceDirectiveDetection`). `go.sum` checksums are enforced by the

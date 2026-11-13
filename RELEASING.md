@@ -48,6 +48,6 @@ Pre-release tags (e.g. `v1.2.3-rc.1`) are auto-marked as prereleases by GoReleas
 
 ## ClawHub (separate)
 
-The ClawHub skill is **not** tied to releases. It republishes whenever `SKILL.md` changes
-on `main`, via `.github/workflows/publish-clawhub.yml` (needs the `CLAWHUB_TOKEN` repo
-secret). Bumping the CLI version does not require a ClawHub republish.
+The ClawHub skill is **not** tied to releases. It republishes whenever `SKILL.md`,
+`OAUTH_SETUP.md`, `docs/MACHINE_CONTRACT.md` or `.clawhubignore` changes on `main`, via `.github/workflows/publish-clawhub.yml`
+(needs the `CLAWHUB_TOKEN` repo secret). Bumping the CLI version does not require a ClawHub republish.

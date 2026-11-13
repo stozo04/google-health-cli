@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - SKILL.md
+      - OAUTH_SETUP.md
+      - .clawhubignore
+      - docs/MACHINE_CONTRACT.md
   workflow_dispatch:
 
 permissions:
