@@ -1,7 +1,8 @@
 # Machine contract — machine contract for google-health-cli
 
 google-health-cli is a read-only Google Health data extractor. It emits your health data as JSON; it does
-no filtering, merging, or interpretation. **stdout is data; stderr is hints/logs/errors.** Pass `--json` for
+no merging or interpretation, and no filtering beyond the requested time window (applied server-side) — except
+that the parsed `sessions` view leaves out points it can't date and reports the count on stderr. **stdout is data; stderr is hints/logs/errors.** Pass `--json` for
 machine-readable output (some commands are JSON-only — noted below).
 
 ## Privacy, data minimization & consent (read before piping this anywhere)
@@ -47,9 +48,9 @@ have leaked.
 | Code | Meaning |
 |---|---|
 | `0` | Success |
-| `2` | Auth / API failure (no/invalid token, refresh failure, non-2xx response, bad JSON) — and `doctor` when not authenticated |
+| `2` | Auth / API failure (no/invalid token, refresh failure, non-2xx response, bad JSON) — and `doctor` when not authenticated; a response larger than 32 MiB is this error, never truncated data |
 | `64` | Usage error (bad flags, bad `--date`, unknown data type, non-listable type, an `api get` path outside the read-only `/v4/` surface, or an expired token with no OAuth client credentials to refresh it) |
-| `78` | Config error (unreadable / invalid `config.json`; `doctor` when no config / no `client_id` is found) |
+| `78` | Config error (unreadable / invalid `config.json`; a `base_url` other than `https://health.googleapis.com` or a scope outside the six read-only Google Health scopes, from file or env; `auth login` / `auth logout` when `token_cache` holds a file this tool did not write (a token refresh only logs a warning and leaves the file untouched) (no `"owner": "google-health-cli"` marker, and not an older cache at `google-health-cli/token.json`); `doctor` when no config / no `client_id` is found) |
 | `1` | Other failure |
 
 When not authenticated, API commands print `Not authenticated. Run:  google-health-cli auth login` to stderr
@@ -173,7 +174,9 @@ order frozen:
 ]
 ```
 
-`sessions --raw` dumps the raw exercise data points (indent-2 JSON).
+A point with no parseable start time cannot be dated, so it is not a row; the command writes
+`warning: N exercise point(s) had no parseable start time and are not in this output; run \`sessions --raw\` to see every point`
+to stderr and exits `0`. `sessions --raw` dumps every raw exercise data point (indent-2 JSON).
 
 ## `api get <path>` (read-only escape hatch)
 
