@@ -26,13 +26,18 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: clawhub-branch-deploy-${{ inputs.slug }}
+  cancel-in-progress: true
+
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       # No `ref:` — checkout defaults to github.ref, i.e. the branch chosen in the
       # Run workflow dropdown, so we publish THAT branch's SKILL.md.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Summarize what will be published
         # Values pass through env, never interpolated straight into the script, so
@@ -55,7 +60,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install clawhub CLI
-        run: npm install -g clawhub
+        run: npm install -g clawhub@0.24.1
 
       - name: Authenticate clawhub
         run: clawhub login --token "$CLAWHUB_TOKEN"
