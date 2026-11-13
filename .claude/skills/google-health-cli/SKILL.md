@@ -7,9 +7,11 @@ description: >
   (one reconciled total per day), gives a parsed view of exercise sessions, and can
   GET any read-only v4 API path. A self-contained, read-only
   client for the Google Health v4 API: authenticates via OAuth2 (token cached
-  locally and auto-refreshed) and emits JSON. Apart from the time window you ask
-  for, which the Google API applies server-side, it does NO filtering or merging
-  of records and never writes to Google Health; the only file it writes is its own local OAuth
+  locally and auto-refreshed) and emits JSON. `data list`, `rollup daily`,
+  `sessions --raw` and `api get` return every record the API sends for the time
+  window you ask for (applied server-side), with no filtering or merging; the
+  `sessions` parsed view leaves out points it can't date and reports how many on
+  stderr. It never writes to Google Health; the only file it writes is its own local OAuth
   token cache. The caller decides what to do with the data. Also ships the setup
   and housekeeping commands a CLI needs: auth login/logout/status, doctor (local
   setup diagnostics), config show/path, version, and shell completion. Single
@@ -17,8 +19,8 @@ description: >
   OAuth client and a one-time interactive browser login; runs headless afterward.
 permissions:
   - "network: HTTPS to accounts.google.com, oauth2.googleapis.com and health.googleapis.com only, plus a one-time 127.0.0.1 listener for the auth login callback"
-  - "file_read: config.json and the OAuth token cache"
-  - "file_write: the OAuth token cache only; it is deleted on auth logout"
+  - "file_read: config.json, the OAuth token cache, and a legacy token cache at the older <user config dir> path when migrating it"
+  - "file_write: the OAuth token cache only; it is deleted on auth logout, and a legacy token cache is deleted once it has been migrated; any other existing file is never overwritten or deleted"
   - "env: the five GOOGLE_HEALTH_* variables listed under envVars"
   - "shell: launches the system browser once during auth login (open, xdg-open or rundll32); no shell interpreter"
 metadata:
@@ -63,8 +65,9 @@ metadata:
 
 Read your **Google Health** data from any agent. This is a generic, **read-only** client
 for the Google Health v4 API: it authenticates, pulls data points for any data type, and
-prints **JSON**. Apart from the time window you request (applied server-side by the API), it does no
-filtering, merging, or interpretation — you get the data and
+prints **JSON**. The raw commands (`data list`, `rollup daily`, `sessions --raw`, `api get`) return every
+record the API sends for the time window you request (applied server-side), with no filtering, merging, or
+interpretation; the parsed `sessions` view leaves out points it can't date and says so on stderr. You get the data and
 parse whatever you care about. Single static binary — **no Python or other runtime**.
 
 > ⚠️ **Read-only.** It requests only read-only Google Health scopes and never writes your
@@ -236,7 +239,13 @@ returns every point.
 > accept only `https://health.googleapis.com`, and `scopes` may list only the six read-only Google
 > Health scopes. Any other value is a config error (exit 78) before a request is made, so a
 > `config.json` picked up from the working directory can't send your OAuth token elsewhere or
-> request write access.
+> request write access. Likewise, `auth login`, token refresh and `auth logout` only overwrite or
+> delete a `token_cache` file this tool wrote: every cache it writes carries `"owner": "google-health-cli"`,
+> and an older unmarked cache is accepted only at the conventional `google-health-cli/token.json`
+> location, or when refreshing with the cache's own refresh token. Pointed at anything else (another
+> app's `token.json`, a key, a directory, a symlink), the file is left untouched: `auth login` and
+> `auth logout` stop with exit 78, and a token refresh logs a warning and keeps the refreshed token
+> in memory only.
 
 ### Raw read-only API access
 

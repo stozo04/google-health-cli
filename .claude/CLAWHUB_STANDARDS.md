@@ -265,7 +265,19 @@ Concrete guards already in place — keep them, and add to them when you add cap
   `TestBaseURLMustBeGoogleHealthOrigin`, `TestScopesMustBeReadOnlyGoogleHealthScopes`
   (`internal/config/config_test.go`) and `TestWorkspaceConfigCannotRedirectToken`
   (`internal/cli/commands_test.go`, which asserts a hostile server receives zero requests) pin it.
-  Tests reach a local server only through the in-package `baseURLOverride` hook, never config.
+  Tests reach a local server only through the in-package `baseURLOverride` hook, never config;
+  `buildAPIClient` re-checks the base URL so the boundary is visible where the token meets the
+  network. A discovered `token_cache` is untrusted too: every cache `SaveToken` writes carries
+  `"owner": "google-health-cli"`, and `SaveToken` / `DeleteToken` touch an existing file only if it
+  is a regular file (checked with `Lstat`, so symlinks are refused) under 64 KiB that is empty,
+  carries that marker, is an older unmarked token at `google-health-cli/token.json`, or (refresh only)
+  holds the refresh token that just succeeded with this tool's OAuth client, which upgrades older
+  custom-path caches (`auth.ErrNotTokenCache`, exit 78 otherwise). Content alone is not
+  proof: another app's `token.json` has the same fields. Guards: `TestSaveTokenRefusesToOverwriteNonTokenFile`,
+  `TestDeleteTokenRefusesToDeleteNonTokenFile`, `TestSaveTokenReplacesOnlyCachesThisToolOwns`,
+  `TestSaveTokenMarksCacheAsOwned`, `TestTokenCacheRefusesSymlinks`,
+  `TestRefreshRewritesUnmarkedCacheOnlyWithItsOwnRefreshToken` (`internal/auth/tokencache_test.go`) and
+  `TestWorkspaceConfigCannotRedirectTokenCacheOntoOtherFiles`.
 - **No silent omissions (Excessive Agency).** `sessions` counts exercise points it can't date and
   reports them on stderr with a pointer to `--raw`. Guard: `TestBuildSessionRowsCountsPointsWithoutStart`
   and `TestReportUnparsedSessionsWarnsOnStderrOnly` (`internal/cli/sessions_test.go`).

@@ -580,3 +580,31 @@ func TestWorkspaceConfigCannotRedirectToken(t *testing.T) {
 		t.Errorf("attacker server received %d request(s); the token must never leave for a non-Google host", n)
 	}
 }
+
+func TestWorkspaceConfigCannotRedirectTokenCacheOntoOtherFiles(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	decoy := filepath.Join(t.TempDir(), "id_ed25519")
+	const decoyContent = "-----BEGIN OPENSSH PRIVATE KEY-----\nnot-a-real-key\n"
+	if err := os.WriteFile(decoy, []byte(decoyContent), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]any{
+		"client_id":     "test-client",
+		"client_secret": "test-secret",
+		"token_cache":   decoy,
+	})
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := run(t, "auth", "logout")
+	var exit *ExitError
+	if !errors.As(err, &exit) || exit.Code != ExitConfig {
+		t.Fatalf("auth logout: err = %v, want ExitError code %d", err, ExitConfig)
+	}
+	got, rerr := os.ReadFile(decoy)
+	if rerr != nil || string(got) != decoyContent {
+		t.Errorf("decoy file was deleted or changed by auth logout: %q, %v", got, rerr)
+	}
+}

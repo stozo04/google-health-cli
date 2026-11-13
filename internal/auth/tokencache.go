@@ -7,10 +7,12 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -19,9 +21,87 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// ErrNotTokenCache means the configured token cache path holds a file that is
+// not an OAuth token, so writing or deleting it could destroy unrelated data.
+var ErrNotTokenCache = errors.New("token cache path holds a file this tool did not write")
+
+const (
+	cacheOwner            = "google-health-cli"
+	conventionalCacheDir  = "google-health-cli"
+	conventionalCacheName = "token.json"
+	maxTokenCacheBytes    = 64 << 10
+)
+
+type ownedToken struct {
+	*oauth2.Token
+	Owner string `json:"owner"`
+}
+
+func ensureTokenCacheIsOurs(path, provenRefreshToken string) error {
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("stat token cache %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() || info.Size() > maxTokenCacheBytes {
+		return refuseTokenCache(path)
+	}
+	data, err := readBounded(path)
+	if err != nil {
+		return err
+	}
+	if len(bytes.TrimSpace(data)) == 0 || isOurTokenCache(path, data, provenRefreshToken) {
+		return nil
+	}
+	return refuseTokenCache(path)
+}
+
+func readBounded(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("read token cache %s: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+	data, err := io.ReadAll(io.LimitReader(f, maxTokenCacheBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read token cache %s: %w", path, err)
+	}
+	return data, nil
+}
+
+func isOurTokenCache(path string, data []byte, provenRefreshToken string) bool {
+	if len(data) > maxTokenCacheBytes {
+		return false
+	}
+	cached := ownedToken{Token: &oauth2.Token{}}
+	if json.Unmarshal(data, &cached) != nil {
+		return false
+	}
+	if cached.Owner == cacheOwner {
+		return true
+	}
+	if provenRefreshToken != "" && cached.RefreshToken == provenRefreshToken {
+		return true
+	}
+	holdsToken := cached.AccessToken != "" || cached.RefreshToken != ""
+	return holdsToken && isConventionalCachePath(path)
+}
+
+func isConventionalCachePath(path string) bool {
+	return filepath.Base(path) == conventionalCacheName &&
+		filepath.Base(filepath.Dir(path)) == conventionalCacheDir
+}
+
+func refuseTokenCache(path string) error {
+	return fmt.Errorf("%w: %s; point token_cache at a new path, or delete the file yourself if it is this tool's stale cache", ErrNotTokenCache, path)
+}
+
 // LoadToken reads the cached *oauth2.Token. A missing file is not an error — it
 // returns (nil, nil) so callers can prompt for `auth login`. A corrupt cache is
-// likewise treated as "no token" so the next login overwrites it.
+// likewise treated as "no token"; SaveToken and DeleteToken refuse to touch it
+// (ErrNotTokenCache), so the user removes it before logging in again.
 func LoadToken(path string) (*oauth2.Token, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -40,36 +120,53 @@ func LoadToken(path string) (*oauth2.Token, error) {
 	return &tok, nil
 }
 
-// SaveToken writes the token cache with owner-only (0600) permissions.
-//
-// It uses os.OpenFile with O_TRUNC rather than os.WriteFile because WriteFile
-// will NOT re-restrict permissions on a file that already exists (GOAL.md §8):
-// passing the mode to OpenFile applies it to a freshly created file, and we
-// additionally Chmod to tighten an existing one. On Windows the Unix bits are
-// largely advisory, so a Chmod failure there must not fail the command — it is
-// ignored (best-effort), matching speediance-cli-go and the Python try/except.
+// SaveToken writes the token cache with owner-only (0600) permissions, through a
+// temp file renamed over path, so the write is atomic and never follows a
+// symlink swapped in after the ownership check. It refuses to replace an
+// existing file this tool did not write (ErrNotTokenCache), so a misdirected
+// token_cache can't clobber unrelated data.
 func SaveToken(path string, tok *oauth2.Token) error {
-	if dir := filepath.Dir(path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return fmt.Errorf("create token cache dir %s: %w", dir, err)
-		}
+	return saveToken(path, tok, "")
+}
+
+func saveToken(path string, tok *oauth2.Token, provenRefreshToken string) error {
+	if err := ensureTokenCacheIsOurs(path, provenRefreshToken); err != nil {
+		return err
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("create token cache dir %s: %w", dir, err)
 	}
 
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	tmp, err := os.CreateTemp(dir, ".token-*.tmp")
 	if err != nil {
-		return fmt.Errorf("open token cache %s: %w", path, err)
+		return fmt.Errorf("create token cache %s: %w", path, err)
 	}
-	defer func() { _ = f.Close() }()
-	_ = f.Chmod(0o600) // best-effort re-tighten; ignored on Windows.
+	tmpPath := tmp.Name()
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tmp.Close()
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	_ = tmp.Chmod(0o600) // best-effort; CreateTemp already uses 0600, and Windows ignores the bits.
 
-	enc := json.NewEncoder(f)
+	enc := json.NewEncoder(tmp)
 	enc.SetIndent("", "  ")
 	// G117: persisting the OAuth token (which holds the access/refresh secrets) to
 	// disk is the entire purpose of the token cache; it is written owner-only
-	// (0600) above, so marshaling its secret fields here is by design.
-	if err := enc.Encode(tok); err != nil { //nolint:gosec // G117: token cache must marshal the secret token (0600).
+	// (0600), so marshaling its secret fields here is by design.
+	if err := enc.Encode(ownedToken{Token: tok, Owner: cacheOwner}); err != nil { //nolint:gosec // G117: token cache must marshal the secret token (0600).
 		return fmt.Errorf("write token cache %s: %w", path, err)
 	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("write token cache %s: %w", path, err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("replace token cache %s: %w", path, err)
+	}
+	committed = true
 	return nil
 }
 
@@ -104,8 +201,11 @@ func MigrateLegacyToken(newPath, legacyPath string) (migrated bool, err error) {
 }
 
 // DeleteToken removes the token cache (used by `auth logout`). A missing file is
-// not an error.
+// not an error; a file that is not an OAuth token is refused (ErrNotTokenCache).
 func DeleteToken(path string) error {
+	if err := ensureTokenCacheIsOurs(path, ""); err != nil {
+		return err
+	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("delete token cache %s: %w", path, err)
 	}
@@ -118,10 +218,11 @@ func DeleteToken(path string) error {
 // persist the result so the on-disk access token stays fresh between runs
 // (GOAL.md §8 — ghealth doesn't do this; we should).
 type persistingSource struct {
-	base   oauth2.TokenSource
-	path   string
-	last   *oauth2.Token
-	logger *slog.Logger
+	base               oauth2.TokenSource
+	path               string
+	last               *oauth2.Token
+	loadedRefreshToken string
+	logger             *slog.Logger
 }
 
 func (p *persistingSource) Token() (*oauth2.Token, error) {
@@ -130,7 +231,7 @@ func (p *persistingSource) Token() (*oauth2.Token, error) {
 		return nil, err
 	}
 	if p.changed(tok) {
-		if err := SaveToken(p.path, tok); err != nil {
+		if err := saveToken(p.path, tok, p.loadedRefreshToken); err != nil {
 			p.logger.Warn("could not persist refreshed token", "path", p.path, "err", err)
 		}
 		p.last = tok
@@ -161,6 +262,9 @@ func NewHTTPClient(ctx context.Context, cfg *oauth2.Config, tok *oauth2.Token, p
 		path:   path,
 		last:   tok, // seed so a valid cached token isn't needlessly rewritten.
 		logger: logger,
+	}
+	if tok != nil {
+		src.loadedRefreshToken = tok.RefreshToken
 	}
 	return &Client{
 		HTTP:   oauth2.NewClient(ctx, src),

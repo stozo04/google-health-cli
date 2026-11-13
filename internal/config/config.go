@@ -136,7 +136,7 @@ func Load(opts Options) (*Config, error) {
 	// 2. Environment overrides (LookupEnv distinguishes set-empty from unset).
 	applyEnv(cfg)
 
-	if err := validateBaseURL(cfg.BaseURL); err != nil {
+	if err := ValidateBaseURL(cfg.BaseURL); err != nil {
 		return nil, err
 	}
 	if err := validateScopes(cfg.Scopes); err != nil {
@@ -255,7 +255,9 @@ var (
 	ErrScopeNotAllowed   = errors.New("OAuth scope not allowed")
 )
 
-func validateBaseURL(raw string) error {
+// ValidateBaseURL reports ErrBaseURLNotAllowed unless raw is the Google Health
+// API origin, the only destination the OAuth token may be sent to.
+func ValidateBaseURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil || !isGoogleHealthOrigin(u) {
 		return fmt.Errorf("%w: %q; the API base URL must be %s, the only host this tool sends your OAuth token to (check base_url in %s and $%s)",
