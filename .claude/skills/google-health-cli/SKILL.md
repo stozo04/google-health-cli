@@ -21,7 +21,7 @@ permissions:
   - "network: HTTPS to accounts.google.com, oauth2.googleapis.com and health.googleapis.com only, plus a one-time 127.0.0.1 listener for the auth login callback"
   - "file_read: config.json, the OAuth token cache, and a legacy token cache at the older <user config dir> path when migrating it"
   - "file_write: the OAuth token cache only; it is deleted on auth logout, and a legacy token cache is deleted once it has been migrated; any other existing file is never overwritten or deleted"
-  - "env: the five GOOGLE_HEALTH_* variables listed under envVars"
+  - "env: the five GOOGLE_HEALTH_* variables listed under envVars, plus the per-user directory variables that Go's os.UserConfigDir and os.UserCacheDir consult to locate the default config and token paths (HOME, XDG_CONFIG_HOME and XDG_CACHE_HOME on Linux; HOME on macOS; AppData and LocalAppData on Windows)"
   - "shell: launches the system browser once during auth login (open, xdg-open or rundll32); no shell interpreter"
 metadata:
   openclaw:
