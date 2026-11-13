@@ -51,3 +51,9 @@ Pre-release tags (e.g. `v1.2.3-rc.1`) are auto-marked as prereleases by GoReleas
 The ClawHub skill is **not** tied to releases. It republishes whenever `SKILL.md`,
 `OAUTH_SETUP.md`, `docs/MACHINE_CONTRACT.md` or `.clawhubignore` changes on `main`, via `.github/workflows/publish-clawhub.yml`
 (needs the `CLAWHUB_TOKEN` repo secret). Bumping the CLI version does not require a ClawHub republish.
+
+ClawHub hides a new version until its security scans finish (about 10 minutes), and the CLI picks the
+next version from the latest public one. When two publishes land inside that window, the second gets
+`Version X already exists`. `scripts/publish-clawhub.sh`, which both ClawHub workflows call, retries
+as the next patch version (up to five attempts) and fails on any other error. `make test-scripts`
+tests it against a fake `clawhub`.

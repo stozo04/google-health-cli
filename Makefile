@@ -61,11 +61,15 @@ snapshot: ## Cross-compile a local snapshot with GoReleaser (no publish)
 	goreleaser build --snapshot --clean
 
 .PHONY: check
-check: check-agents tidy fmt vet lint test-race ## Run the full pre-commit gauntlet
+check: check-agents test-scripts tidy fmt vet lint test-race ## Run the full pre-commit gauntlet
 
 .PHONY: clean
 clean: ## Remove build artifacts
 	rm -rf bin dist coverage.out $(BINARY) $(BINARY).exe
+
+.PHONY: test-scripts
+test-scripts: ## Test the ClawHub publish script against a fake clawhub
+	bash scripts/test-publish-clawhub.sh
 
 .PHONY: check-agents
 check-agents: ## Check complete project skill mirrors
