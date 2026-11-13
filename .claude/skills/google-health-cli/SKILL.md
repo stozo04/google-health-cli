@@ -109,7 +109,7 @@ human in a browser **once**. After that it runs headless (the token auto-refresh
    ```bash
    # A) Download a release for your OS/arch and put it on PATH:
    #    https://github.com/stozo04/google-health-cli/releases
-   # B) Or with Go (1.25+):
+   # B) Or with Go (1.26+):
    go install github.com/stozo04/google-health-cli/cmd/google-health-cli@latest
    ```
 2. **Create a Google Cloud OAuth client** (Desktop app, read-only Health scopes, ~10 min,
