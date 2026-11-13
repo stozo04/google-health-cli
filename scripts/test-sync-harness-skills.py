@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Self-check for scripts/sync-harness-skills.py — the project skill synchronization gate.
 
-    python scripts/test-sync-harness-skills.py
+    python3 scripts/test-sync-harness-skills.py
 
 Every case builds a throwaway git repo in a temp directory and copies the real script into it,
 so nothing here can touch the actual harness trees. That matters more than usual: this script's

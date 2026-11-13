@@ -147,7 +147,7 @@ def main(argv):
             for h in HARNESSES:
                 print(f"      .{h}: {state[h]}")
         print("\nThe harness you edited is the source of truth. Propagate it with:")
-        print("  python scripts/sync-harness-skills.py --fix --from <claude|cursor|codex>")
+        print("  python3 scripts/sync-harness-skills.py --fix --from <claude|cursor|codex>")
         return 1
 
     if not found:
