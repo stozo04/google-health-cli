@@ -44,7 +44,7 @@ guard the moment a change makes that category exploitable.
   token cache. SkillSpector's PE3 rule also matches the prose `access token` / `access the
   credentials` in any shipped file, Go comments included, and reports it as High "Credential
   Access", so shipped files say "OAuth token". → rules 1–2; CLI_CONVENTIONS §3; guarded by
-  `TestClawhubPackageAvoidsCredentialAccessProse`.
+  `make check-clawhub`, which fails on that phrase in any file the package ships.
 - **Supply Chain** (unpinned dependencies, external script fetching, obfuscated code) — Go modules
   pin every dependency by version **and** checksum (`go.sum`, enforced by the toolchain on every
   CI build); nothing fetches remote scripts/code at build or run; no obfuscated/minified code.
@@ -96,14 +96,17 @@ guard the moment a change makes that category exploitable.
 - **YARA Signatures** (malware, webshell, cryptominer) — **N/A**: introduce nothing that matches;
   the repo ships a single self-contained client.
 - **MCP Least Privilege** (underdeclared capability, wildcard permission, missing permission
-  declaration) — the `metadata.openclaw.permissions` block lists the exact network hosts and the
-  exact files read/written — no wildcards, nothing omitted. The `env` permission also names the
-  per-user directory variables (`HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `AppData`,
-  `LocalAppData`) that `os.UserConfigDir` / `os.UserCacheDir` read to find the default paths.
-  SkillSpector's over-declared check (LP4) detects capabilities with Python/JS regexes
-  (`os.getenv`, `os.environ`, `open(...'r')`, `.read_text(`), so it misses Go's `os.LookupEnv`,
-  `os.ReadFile` and `os.Open` and reports the `env` and `file_read` declarations as unused. Both
-  are real reads: keep the declarations and don't reshape Go code to match the scanner. → rule 2.
+  declaration) — the `metadata.openclaw.permissions` block lists the exact network hosts, the
+  exact files read/written, the environment variables read and the one process launched — no
+  wildcards, nothing omitted. Its `env` list also names the per-user directory variables (`HOME`,
+  `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `AppData`, `LocalAppData`) that `os.UserConfigDir` /
+  `os.UserCacheDir` read to find the default paths. SkillSpector only reads a top-level
+  `permissions` or `allowed-tools` field, and the Agent Skills spec allows neither for this
+  (`permissions` isn't a spec field; `allowed-tools` preapproves agent tools, it doesn't describe
+  the binary). So SkillSpector reports LP3 "no tool scope declared" (MEDIUM) as a known false
+  positive. Don't add a top-level `permissions` to silence it: the `agent skills spec` CI check
+  rejects it. A `.skillspector-baseline.yaml` can't suppress it either, because clawhub never
+  ships dotfiles. → rule 2.
 - **MCP Tool Poisoning** (hidden instructions, Unicode deception, parameter-description injection)
   — no hidden instructions, no invisible/look-alike Unicode, no injection text in any description
   or example. → rule 4.
@@ -199,6 +202,8 @@ guard the moment a change makes that category exploitable.
 - [ ] Fixtures, goldens, and examples are synthetic — no numeric user ids (`users/me`), no
       long opaque record ids, no real account/device identifiers.
 - [ ] Each of the above is enforced by a test or startup guard, not just documented.
+- [ ] `make check-clawhub` passes: it lists the package with clawhub's own `forEachPublishFile` (pinned `CLAWHUB_VERSION`) and fails on any file outside the `SHIPPABLE` allowlist in `scripts/check-clawhub-package.mjs`, a missing `REQUIRED` file, or SkillSpector's credential-access prose. CI runs it on every PR and before every publish.
+- [ ] Every skill copy passes the upstream Agent Skills validator (`skills-ref validate`; the `agent skills spec` CI job): only `name`, `description` (≤ 1024 chars), `license`, `allowed-tools`, `metadata` and `compatibility` at the top level, and no inline `[...]` / `{...}` YAML.
 - [ ] `make check` (or the repo's equivalent) is green.
 - [ ] **Immediately before opening the PR**, re-read this file and walk this checklist against
       the actual diff (rule 9).
@@ -254,14 +259,16 @@ Concrete guards already in place — keep them, and add to them when you add cap
   declared key. Its matcher is unit-tested (`TestAllowedEnvReadLogic`) and it caught (and now
   prevents reintroducing) a stray `LOG_LEVEL` read.
 - **Published package == the skill (all categories).** `clawhub skill publish .` uploads every
-  non-dot file under the repo root except what `.clawhubignore` lists, and ClawHub scans every file
-  it receives as if it were the skill. `.clawhubignore` keeps tests, `testdata/`, `scripts/` and the
-  agent-instruction docs (`AGENTS.md`, `CLAUDE.md`, `Engineering-Prompt.md`, `RELEASING.md`,
-  `docs/OPERATING_INSTRUCTIONS.md`, `docs/PROJECT_INSTRUCTIONS.md`, `docs/project-agent-audit.md`)
-  out of the package; the shipped Go source, `SKILL.md`, `OAUTH_SETUP.md`, `README.md` and
-  `docs/MACHINE_CONTRACT.md` stay in so reviewers can check behavior. `TestClawhubPackageExcludesRepoTooling`
-  and `TestClawhubPackageKeepsSkillDocs` (`internal/cli/clawhub_package_test.go`) fail if either set
-  drifts. When you add repo tooling or agent docs, add them to `.clawhubignore` and the test.
+  non-dot file under the repo root except what `.gitignore` and `.clawhubignore` exclude, and
+  ClawHub scans every file it receives as if it were the skill. `.clawhubignore` keeps tests,
+  `testdata/`, `scripts/`, the `Makefile` and the agent-instruction docs out of the package; the
+  Go source needed to build (plus the embedded `internal/api/datatypes.json`), `SKILL.md`,
+  `OAUTH_SETUP.md`, `README.md`, `LICENSE`, `config.example.json` and `docs/MACHINE_CONTRACT.md`
+  stay in. `make check-clawhub` (`scripts/check-clawhub-package.mjs`) runs clawhub's own file
+  walker at the pinned `CLAWHUB_VERSION` and fails on any file outside `SHIPPABLE` or a missing
+  `REQUIRED` file, so the allowlist lives in one place and can't drift from what a publish really
+  uploads. CI runs it as `clawhub package contents`, and both publish workflows run it before
+  uploading. When you add repo tooling or agent docs, add them to `.clawhubignore`.
 - **Setup-guide warnings (rule 3).** `OAUTH_SETUP.md` carries the "Protect your credentials"
   plaintext-secrets warning and limits the "unverified app" bypass to an OAuth client the user
   created. `TestOAuthSetupDocWarnsAboutCredentialsAndUnverifiedApp`
@@ -299,11 +306,14 @@ Concrete guards already in place — keep them, and add to them when you add cap
   returns an `*api.Error` (exit 2) when a body is larger, instead of handing back cut-off data.
   Guard: `TestOversizedResponsesAreErrorsNotTruncatedData` (`internal/api/client_test.go`) covers
   `RawGet`, `ListDataPoints` and `RollUpDaily`.
-- **Declared tool scope (MCP Least Privilege).** SkillSpector reads a top-level `permissions` list
-  in the `SKILL.md` frontmatter, not `metadata.openclaw.permissions`, and maps each entry to a
-  capability by its first keyword (`network`, `file_read`, `file_write`, `env`, `shell`). Keep one
-  entry per real capability, worded so no earlier keyword matches first. Guard:
-  `TestSkillDocDeclaresToolScopeAndConfigBoundary` (`internal/cli/skill_doc_test.go`).
+- **Declared tool scope and install (MCP Least Privilege).** The scope lives only under
+  `metadata.openclaw.permissions` (`network`, `files.read`, `files.write`, `env`, `process`), and
+  `metadata.openclaw.install` has one `kind: go` entry for
+  `github.com/stozo04/google-health-cli/cmd/google-health-cli@latest`. `@latest` must resolve to a
+  release whose behavior matches `SKILL.md`, so cut a release after behavior changes land. If the
+  module ever goes to v2, its path needs `/v2` first, and the install entry with it. Guard:
+  `TestSkillDocDeclaresToolScopeAndConfigBoundary` (`internal/cli/skill_doc_test.go`), which also
+  fails on a top-level `permissions` field.
 - **No dependency redirection (Supply Chain).** `TestGoModHasNoReplaceDirectives`
   (`internal/cli/source_guards_test.go`) fails if `go.mod` carries a `replace` directive; the
   detector is unit-tested (`TestReplaceDirectiveDetection`). `go.sum` checksums are enforced by the

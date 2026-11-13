@@ -1,28 +1,17 @@
 ---
 name: google-health-cli
 description: >
-  Read your Google Health data from any agent. Lists data points for every Google
-  Health data type (heart rate, resting heart rate, sleep, steps, distance, weight,
-  blood oxygen, VO2 max, exercise, and more), returns server-side daily roll-ups
-  (one reconciled total per day), gives a parsed view of exercise sessions, and can
-  GET any read-only v4 API path. A self-contained, read-only
-  client for the Google Health v4 API: authenticates via OAuth2 (token cached
-  locally and auto-refreshed) and emits JSON. `data list`, `rollup daily`,
-  `sessions --raw` and `api get` return every record the API sends for the time
-  window you ask for (applied server-side), with no filtering or merging; the
-  `sessions` parsed view leaves out points it can't date and reports how many on
-  stderr. It never writes to Google Health; the only file it writes is its own local OAuth
-  token cache. The caller decides what to do with the data. Also ships the setup
-  and housekeeping commands a CLI needs: auth login/logout/status, doctor (local
-  setup diagnostics), config show/path, version, and shell completion. Single
-  static binary, no Python or other runtime. NOTE: needs your own Google Cloud
-  OAuth client and a one-time interactive browser login; runs headless afterward.
-permissions:
-  - "network: HTTPS to accounts.google.com, oauth2.googleapis.com and health.googleapis.com only, plus a one-time 127.0.0.1 listener for the auth login callback"
-  - "file_read: config.json, the OAuth token cache, and a legacy token cache at the older <user config dir> path when migrating it"
-  - "file_write: the OAuth token cache only; it is deleted on auth logout, and a legacy token cache is deleted once it has been migrated; any other existing file is never overwritten or deleted"
-  - "env: the five GOOGLE_HEALTH_* variables listed under envVars, plus the per-user directory variables that Go's os.UserConfigDir and os.UserCacheDir consult to locate the default config and token paths (HOME, XDG_CONFIG_HOME and XDG_CACHE_HOME on Linux; HOME on macOS; AppData and LocalAppData on Windows)"
-  - "shell: launches the system browser once during auth login (open, xdg-open or rundll32); no shell interpreter"
+  Read your Google Health data from any agent: data points for every Google Health
+  data type (heart rate, sleep, steps, distance, weight, blood oxygen, VO2 max,
+  exercise and more), server-side daily roll-ups, a parsed view of exercise
+  sessions, and GET of any read-only v4 API path, all as JSON. `data list`,
+  `rollup daily`, `sessions --raw` and `api get` return every record the API sends
+  for the window you ask for, unfiltered; the parsed `sessions` view leaves out
+  points it can't date and reports how many on stderr. It never writes to Google
+  Health; the only file it writes is its own local OAuth token cache. Also ships
+  auth login/logout/status, doctor, config show/path, version and shell
+  completion. Single static Go binary. Needs your own Google Cloud OAuth client
+  and a one-time browser login; runs headless afterward.
 metadata:
   openclaw:
     emoji: 🩺
@@ -38,11 +27,24 @@ metadata:
         - "token cache — the cached OAuth token (default <user cache dir>/google-health-cli/token.json, a non-roaming location; overridable via GOOGLE_HEALTH_TOKEN_CACHE; a token left at the older <user config dir> path is migrated forward automatically)"
       files.write:
         - "token cache — written at login, re-written when the token auto-refreshes, and deleted on `auth logout`; a legacy token at the older <user config dir> path is removed after it is migrated forward (no other files are written or deleted)"
+      env:
+        - "The five GOOGLE_HEALTH_* variables listed under envVars"
+        - "The per-user directory variables that Go's os.UserConfigDir and os.UserCacheDir consult to locate the default config and token paths (HOME, XDG_CONFIG_HOME and XDG_CACHE_HOME on Linux; HOME on macOS; AppData and LocalAppData on Windows)"
+      process:
+        - "Launches the system browser once during auth login (open, xdg-open or rundll32), with the URL as a separate argument; no shell interpreter"
     requires:
-      bins: []
+      bins:
+        - google-health-cli
       env:
         - GOOGLE_HEALTH_CLIENT_ID
         - GOOGLE_HEALTH_CLIENT_SECRET
+    install:
+      - id: go
+        kind: go
+        module: github.com/stozo04/google-health-cli/cmd/google-health-cli@latest
+        bins:
+          - google-health-cli
+        label: Install google-health-cli (go)
     envVars:
       - name: GOOGLE_HEALTH_CLIENT_ID
         description: "Google Cloud OAuth client ID (Desktop app type). Create one once — see the repo's OAUTH_SETUP.md."

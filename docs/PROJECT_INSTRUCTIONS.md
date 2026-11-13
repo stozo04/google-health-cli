@@ -67,7 +67,8 @@ self-contained and owes it nothing at runtime.
 | `make build` | Build the binary into `./bin` |
 | `make test` / `make test-race` | Run tests (with the race detector) |
 | `make lint` / `make fmt` / `make vet` | golangci-lint / gofumpt+goimports / go vet |
-| `make check` | Full pre-commit gauntlet: `tidy fmt vet lint test-race` |
+| `make check` | Full pre-commit gauntlet: `check-agents check-clawhub test-scripts tidy fmt vet lint test-race` |
+| `make check-clawhub` | Fail if `clawhub skill publish` would ship a file outside the allowlist (needs Node) |
 
 Go must be on your `PATH`, along with `$(go env GOPATH)/bin` (where `make lint`/`fmt` tools like
 `gofumpt` and `golangci-lint` install). If they aren't, prepend them for the session — e.g. in PowerShell,
@@ -88,7 +89,7 @@ there is **no version constant to bump**. The ClawHub publish workflow (`publish
 **independent of releases** — it republishes the skill whenever `SKILL.md`, `OAUTH_SETUP.md`, `docs/MACHINE_CONTRACT.md` or `.clawhubignore`
 changes on `main` (or
 via manual `workflow_dispatch`), so a fix reaches ClawHub on merge, not on tag. `.clawhubignore` decides
-what ships: keep tests, scripts and agent-instruction docs out of it (guarded by `TestClawhubPackageExcludesRepoTooling`).
+what ships: keep tests, scripts and agent-instruction docs out of it. `make check-clawhub` fails on any file outside the allowlist in `scripts/check-clawhub-package.mjs`, in CI and before every publish.
 Both ClawHub workflows publish through `scripts/publish-clawhub.sh`, which retries with the next patch version when
 a version still in ClawHub review blocks the automatic one (see `RELEASING.md`).
 
