@@ -5,6 +5,7 @@ BINARY       := google-health-cli
 PKG          := ./...
 MAIN         := ./cmd/google-health-cli
 LOCAL_PREFIX := github.com/stozo04/google-health-cli
+PYTHON       ?= python3
 
 .DEFAULT_GOAL := help
 
@@ -68,5 +69,5 @@ clean: ## Remove build artifacts
 
 .PHONY: check-agents
 check-agents: ## Check complete project skill mirrors
-	python scripts/sync-harness-skills.py --check
-	python scripts/test-sync-harness-skills.py
+	$(PYTHON) scripts/sync-harness-skills.py --check
+	$(PYTHON) scripts/test-sync-harness-skills.py
