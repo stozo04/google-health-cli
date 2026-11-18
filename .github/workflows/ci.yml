@@ -39,6 +39,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      GOLANGCI_LINT_VERSION: v2.15.0
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -47,13 +49,27 @@ jobs:
           go-version: "1.26"
           check-latest: true
 
+      - id: go
+        run: |
+          echo "version=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - id: linter
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/go/bin/golangci-lint
+          key: golangci-lint-${{ env.GOLANGCI_LINT_VERSION }}-${{ steps.go.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
+
+      # Build golangci-lint from source with the runner's Go (1.26), so the
+      # linter's toolchain always matches the module's go directive.
+      - name: Build golangci-lint
+        if: steps.linter.outputs.cache-hit != 'true'
+        run: go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$GOLANGCI_LINT_VERSION"
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.15.0
-          # Build golangci-lint from source with the runner's Go (1.26), so the
-          # linter's toolchain always matches the module's go directive.
-          install-mode: goinstall
+          install-mode: none
 
   clawhub-package:
     name: clawhub package contents
