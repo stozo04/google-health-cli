@@ -202,7 +202,7 @@ guard the moment a change makes that category exploitable.
 - [ ] Fixtures, goldens, and examples are synthetic — no numeric user ids (`users/me`), no
       long opaque record ids, no real account/device identifiers.
 - [ ] Each of the above is enforced by a test or startup guard, not just documented.
-- [ ] `make check-clawhub` passes: it lists the package with clawhub's own `forEachPublishFile` (pinned `CLAWHUB_VERSION`) and fails on any file outside the `SHIPPABLE` allowlist in `scripts/check-clawhub-package.mjs`, a missing `REQUIRED` file, or SkillSpector's credential-access prose. CI runs it on every PR and before every publish.
+- [ ] `make check-clawhub` passes: it lists the package with clawhub's own `forEachPublishFile` (pinned `CLAWHUB_VERSION`) and fails on any file outside the `SHIPPABLE` allowlist in `scripts/check-clawhub-package.mjs`, a missing `REQUIRED` file, a shipped file missing from `publish-clawhub.yml`'s `paths`, or SkillSpector's credential-access prose. CI runs it on every PR and before every publish.
 - [ ] Every skill copy passes the upstream Agent Skills validator (`skills-ref validate`; the `agent skills spec` CI job): only `name`, `description` (≤ 1024 chars), `license`, `allowed-tools`, `metadata` and `compatibility` at the top level, and no inline `[...]` / `{...}` YAML.
 - [ ] `make check` (or the repo's equivalent) is green.
 - [ ] **Immediately before opening the PR**, re-read this file and walk this checklist against
@@ -265,9 +265,10 @@ Concrete guards already in place — keep them, and add to them when you add cap
   Go source needed to build (plus the embedded `internal/api/datatypes.json`), `SKILL.md`,
   `OAUTH_SETUP.md`, `README.md`, `LICENSE`, `config.example.json` and `docs/MACHINE_CONTRACT.md`
   stay in. `make check-clawhub` (`scripts/check-clawhub-package.mjs`) runs clawhub's own file
-  walker at the pinned `CLAWHUB_VERSION` and fails on any file outside `SHIPPABLE` or a missing
-  `REQUIRED` file, so the allowlist lives in one place and can't drift from what a publish really
-  uploads. CI runs it as `clawhub package contents`, and both publish workflows run it before
+  walker at the pinned `CLAWHUB_VERSION` and fails on any file outside `SHIPPABLE`, a missing
+  `REQUIRED` file, or a shipped file that isn't in `publish-clawhub.yml`'s `on.push.paths` (so a
+  change to it would not republish), so the allowlist lives in one place and can't drift from what
+  a publish really uploads or from what triggers one. CI runs it as `clawhub package contents`, and both publish workflows run it before
   uploading. When you add repo tooling or agent docs, add them to `.clawhubignore`.
 - **Setup-guide warnings (rule 3).** `OAUTH_SETUP.md` carries the "Protect your credentials"
   plaintext-secrets warning and limits the "unverified app" bypass to an OAuth client the user

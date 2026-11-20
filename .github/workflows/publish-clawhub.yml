@@ -6,8 +6,17 @@ on:
     paths:
       - SKILL.md
       - OAUTH_SETUP.md
-      - .clawhubignore
+      - README.md
+      - LICENSE
+      - config.example.json
       - docs/MACHINE_CONTRACT.md
+      - go.mod
+      - go.sum
+      - cmd/**
+      - internal/**
+      - "!**/*_test.go"
+      - "!**/testdata/**"
+      - .clawhubignore
   workflow_dispatch:
 
 permissions:
