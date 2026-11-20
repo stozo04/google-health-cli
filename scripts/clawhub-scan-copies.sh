@@ -84,7 +84,7 @@ run_still_active() {
 
 published_version() {
   local slug="$1" version
-  version=$(sed -nE "s/.* ${slug}@([0-9]+\.[0-9]+\.[0-9]+).*/\1/p" | tail -n 1)
+  version=$(sed -nE "s/.* ${slug}@([0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)*)[;[:space:]].*/\1/p" | tail -n 1)
   if [[ -z "$version" ]]; then
     echo "Could not find the published version of \`$slug\` in the publish output." >&2
     return 1

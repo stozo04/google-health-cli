@@ -141,6 +141,8 @@ expect_version "version reads a first publish" \
   "$(version_of google-health-cli-scan-7 "OK. Published google-health-cli-scan-7@1.0.0 (abc123)")" 1.0.0
 expect_version "version takes the last line after retries" \
   "$(version_of google-health-cli "$(printf 'Error: Version 1.0.15 already exists.\nUpdate submitted for google-health-cli@1.0.16; pending.')")" 1.0.16
+expect_version "version keeps a prerelease suffix" \
+  "$(version_of google-health-cli-scan-7 "Update submitted for google-health-cli-scan-7@1.0.0-rc.1; pending security scans before it becomes public.")" 1.0.0-rc.1
 expect_version "version fails without a matching slug" \
   "$(version_of google-health-cli "Update submitted for google-health-cli-scan-7@1.0.3; pending.")" "exit 1"
 
