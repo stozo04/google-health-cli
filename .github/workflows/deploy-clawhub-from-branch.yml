@@ -14,7 +14,8 @@ name: Deploy to ClawHub (from branch)
 # test listings never pile up on ClawHub. If the report can't be saved the copy
 # stays for inspection, and the weekly sweep removes it later. target=live republishes the real
 # google-health-cli listing from the chosen branch and
-# leaves it in place without waiting for the scan.
+# leaves it in place without waiting for the scan. It waits in the same
+# clawhub-publish-live queue as the main publish, so the two never overlap.
 # sweep-clawhub-scan-copies.yml deletes any scan copy a cancelled run left behind.
 #
 # Note: the "Run workflow" button only appears once this file is on the default
@@ -34,8 +35,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: clawhub-branch-deploy-${{ inputs.target == 'live' && 'live' || github.run_id }}
-  cancel-in-progress: true
+  group: ${{ inputs.target == 'live' && 'clawhub-publish-live' || format('clawhub-scan-copy-{0}', github.run_id) }}
+  cancel-in-progress: false
 
 env:
   SLUG: ${{ inputs.target == 'live' && 'google-health-cli' || format('google-health-cli-scan-{0}-{1}', github.run_id, github.run_attempt) }}
@@ -92,9 +93,9 @@ jobs:
           TARGET: ${{ inputs.target }}
         run: |
           set -o pipefail
-          scripts/publish-clawhub.sh "$SLUG" stozo04 "Google Health" | tee publish-output.txt
+          scripts/publish-clawhub.sh "$SLUG" stozo04 "Google Health" | tee "$RUNNER_TEMP/publish-output.txt"
           if [[ "$TARGET" == "scan-copy" ]]; then
-            version=$(scripts/clawhub-scan-copies.sh version "$SLUG" < publish-output.txt)
+            version=$(scripts/clawhub-scan-copies.sh version "$SLUG" < "$RUNNER_TEMP/publish-output.txt")
             echo "version=$version" >> "$GITHUB_OUTPUT"
           fi
 
