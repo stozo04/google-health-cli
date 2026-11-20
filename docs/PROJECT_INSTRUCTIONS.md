@@ -86,7 +86,7 @@ Releases are **tag-driven**: `git tag vX.Y.Z && git push origin vX.Y.Z` (or Acti
 Run workflow) triggers GoReleaser (`.goreleaser.yaml`), which cross-compiles, builds archives +
 checksums, and publishes a GitHub Release. Version metadata is injected from the tag via ldflags —
 there is **no version constant to bump**. The ClawHub publish workflow (`publish-clawhub.yml`) is
-**independent of releases** — it republishes the skill whenever a file the package ships (or `.clawhubignore`)
+**independent of releases** — it republishes the skill whenever a file the package ships (or `.clawhubignore` or `.gitignore`, which decide what ships)
 changes on `main` (or
 via manual `workflow_dispatch`), so a fix reaches ClawHub on merge, not on tag. `.clawhubignore` decides
 what ships: keep tests, scripts and agent-instruction docs out of it. `make check-clawhub` fails on any file outside the allowlist in `scripts/check-clawhub-package.mjs`, in CI and before every publish.

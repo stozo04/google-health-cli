@@ -17,6 +17,7 @@ on:
       - "!**/*_test.go"
       - "!**/testdata/**"
       - .clawhubignore
+      - .gitignore
   workflow_dispatch:
 
 permissions:
