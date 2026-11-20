@@ -88,11 +88,15 @@ jobs:
 
       - name: Publish skill
         id: publish
+        env:
+          TARGET: ${{ inputs.target }}
         run: |
           set -o pipefail
           scripts/publish-clawhub.sh "$SLUG" stozo04 "Google Health" | tee publish-output.txt
-          version=$(scripts/clawhub-scan-copies.sh version "$SLUG" < publish-output.txt)
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$TARGET" == "scan-copy" ]]; then
+            version=$(scripts/clawhub-scan-copies.sh version "$SLUG" < publish-output.txt)
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Wait for the ClawHub scan
         if: ${{ inputs.target == 'scan-copy' }}
