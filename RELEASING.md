@@ -57,7 +57,8 @@ next version from the latest public one. When two publishes land inside that win
 `Version X already exists`. `scripts/publish-clawhub.sh`, which both ClawHub workflows call, retries
 as the next patch version (up to five attempts) and fails on any other error. Every publish to the live
 listing (a merge to `main` or a `target=live` branch run) waits in one `clawhub-publish-live` queue
-and none cancels another, so two can never publish `google-health-cli` at once.
+(`queue: max`, first in, first out) and none cancels or replaces another, so two can never publish
+`google-health-cli` at once and a queued main publish is never dropped.
 
 To scan a branch without merging, run **Deploy to ClawHub (from branch)** with `target=scan-copy`. It
 publishes to `google-health-cli-scan-<run id>-<attempt>`, waits for the scan, puts the verdict in the run summary
