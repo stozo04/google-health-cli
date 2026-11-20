@@ -55,5 +55,11 @@ The ClawHub skill is **not** tied to releases. It republishes whenever `SKILL.md
 ClawHub hides a new version until its security scans finish (about 10 minutes), and the CLI picks the
 next version from the latest public one. When two publishes land inside that window, the second gets
 `Version X already exists`. `scripts/publish-clawhub.sh`, which both ClawHub workflows call, retries
-as the next patch version (up to five attempts) and fails on any other error. `make test-scripts`
-tests it against a fake `clawhub`.
+as the next patch version (up to five attempts) and fails on any other error.
+
+To scan a branch without merging, run **Deploy to ClawHub (from branch)** with `target=scan-copy`. It
+publishes to `google-health-cli-scan-<run id>-<attempt>`, waits for the scan, puts the verdict in the run summary
+and the full report in the `clawhub-scan-report` artifact, then deletes the copy (it keeps the copy if the report could not be saved). The weekly **Sweep
+ClawHub scan copies** workflow deletes any copy a finished run left behind. Both use
+`scripts/clawhub-scan-copies.sh`, which refuses to delete anything outside the `google-health-cli-scan-`
+prefix. `make test-scripts` tests both scripts against a fake `clawhub`.

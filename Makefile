@@ -68,8 +68,9 @@ clean: ## Remove build artifacts
 	rm -rf bin dist coverage.out $(BINARY) $(BINARY).exe
 
 .PHONY: test-scripts
-test-scripts: ## Test the ClawHub publish script against a fake clawhub
+test-scripts: ## Test the ClawHub publish and scan-copy scripts against a fake clawhub
 	bash scripts/test-publish-clawhub.sh
+	bash scripts/test-clawhub-scan-copies.sh
 
 .PHONY: check-agents
 check-agents: ## Check complete project skill mirrors
