@@ -14,8 +14,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: clawhub-publish-main
-  cancel-in-progress: true
+  group: clawhub-publish-live
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   publish:
