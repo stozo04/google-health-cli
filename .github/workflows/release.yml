@@ -1,10 +1,14 @@
 name: Release
 
 on:
-  # Tag-driven: `git tag vX.Y.Z && git push origin vX.Y.Z`.
   push:
     tags:
       - "v*"
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
   # Button-driven: Actions → Release → "Run workflow" → enter the version.
   workflow_dispatch:
     inputs:
@@ -17,7 +21,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ inputs.version || github.ref_name }}
+  group: release-${{ inputs.tag || inputs.version || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -27,6 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
 
       # Manual runs create + push the tag at the checked-out commit so GoReleaser
