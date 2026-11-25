@@ -82,10 +82,11 @@ Run `make check` before committing.
 
 ## Releasing
 
-Releases are **tag-driven**: `git tag vX.Y.Z && git push origin vX.Y.Z` (or Actions → Release →
-Run workflow) triggers GoReleaser (`.goreleaser.yaml`), which cross-compiles, builds archives +
-checksums, and publishes a GitHub Release. Version metadata is injected from the tag via ldflags —
-there is **no version constant to bump**. The ClawHub publish workflow (`publish-clawhub.yml`) is
+Releases are cut by **merging the release PR**: release-please keeps a `chore(main): release X.Y.Z`
+PR open and picks the version from commit types; merging it tags `vX.Y.Z` and runs GoReleaser
+(`.goreleaser.yaml`), which cross-compiles, builds archives + checksums, and publishes the GitHub
+Release. Pushing a tag by hand remains a fallback (see `RELEASING.md`). Version metadata is injected
+from the tag via ldflags — there is **no version constant to bump**. The ClawHub publish workflow (`publish-clawhub.yml`) is
 **independent of releases** — it republishes the skill whenever a file the package ships (or `.clawhubignore` or `.gitignore`, which decide what ships)
 changes on `main` (or
 via manual `workflow_dispatch`), so a fix reaches ClawHub on merge, not on tag. `.clawhubignore` decides
@@ -97,12 +98,12 @@ sweep removes any copy left behind (see `RELEASING.md`).
 
 - **Versioning: SemVer.** A backward-compatible change (e.g. the auto-migrated token-cache default in
   v1.3.0) is a **minor**; breaking the documented JSON shapes / exit codes (`AGENTS.md`) is a **major**.
-- **Commit messages: Conventional Commits** (`feat:` / `fix:` / …). GoReleaser auto-groups the release
-  changelog by these prefixes (`changelog.groups`): `feat:` → Features, `fix:` → Bug fixes, everything
+- **Commit messages: Conventional Commits** (`feat:` / `fix:` / …). release-please picks the version
+  from them, and GoReleaser auto-groups the release changelog by these prefixes (`changelog.groups`): `feat:` → Features, `fix:` → Bug fixes, everything
   else → Other changes; `docs:`/`test:`/`chore:` are excluded. **Unprefixed commits still ship but read
   as "Other changes" — so prefix them, or the auto-notes degrade.** Squash-merge PRs with a `feat:`/`fix:`
   title so each release line is one clean entry.
-- **Release notes are automatic on tag** — the grouped changelog plus a static install footer
+- **Release notes are automatic on release** — the grouped changelog plus a static install footer
   (`release.footer`). There is no `CHANGELOG.md` / per-release file to maintain by design; write good
   `feat:`/`fix:` subjects and the notes follow.
 
